@@ -1,0 +1,31 @@
+{
+  "input": "We need 5,000 pcs wooden paddle brushes, logo on the back and freight included. Please deliver before Christmas.",
+  "result": {
+    "customer": {
+      "company": {"status": "missing", "value": null, "evidence": null},
+      "destination": {"status": "missing", "value": null, "evidence": null}
+    },
+    "products": [
+      {
+        "product_type": {"status": "known", "value": "wooden paddle brush", "evidence": "wooden paddle brushes"},
+        "quantity": {"status": "known", "value": 5000, "evidence": "5,000 pcs"},
+        "logo": {"status": "known", "value": "back", "evidence": "logo on the back"},
+        "target_time": {"status": "ambiguous", "value": "before Christmas", "evidence": "before Christmas"}
+      }
+    ],
+    "missing_or_ambiguous": [
+      {
+        "field": "destination",
+        "status": "missing",
+        "priority": "critical",
+        "reason": "Freight is requested but destination is absent."
+      },
+      {
+        "field": "target_time",
+        "status": "ambiguous",
+        "priority": "important",
+        "reason": "A concrete requested arrival date is not provided."
+      }
+    ]
+  }
+}
