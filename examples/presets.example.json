@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "presets": [
+    {
+      "id": "customer-business",
+      "name": "客户商务",
+      "scene": "customer_email",
+      "domain": "oem_manufacturing",
+      "tone": "professional_business",
+      "persona": "direct_practical",
+      "length": "preserve",
+      "fidelity": "high",
+      "custom_prompt": null,
+      "quick_mode_approved": true
+    },
+    {
+      "id": "formal-document",
+      "name": "正式文件",
+      "scene": "formal_document",
+      "domain": "general",
+      "tone": "serious_precise",
+      "persona": "literal_rigid",
+      "length": "preserve",
+      "fidelity": "strict",
+      "custom_prompt": null,
+      "quick_mode_approved": true
+    },
+    {
+      "id": "friendly-chat",
+      "name": "友好聊天",
+      "scene": "instant_message",
+      "domain": "general",
+      "tone": "friendly_polite",
+      "persona": "natural",
+      "length": "preserve",
+      "fidelity": "standard",
+      "custom_prompt": null,
+      "quick_mode_approved": true
+    }
+  ],
+  "conflicts": [
+    ["formal_document", "humorous"],
+    ["formal_document", "lively"],
+    ["strict", "heavy_shorten"],
+    ["humorous", "literal_rigid"]
+  ]
+}
