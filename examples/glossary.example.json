@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "terms": [
+    {
+      "id": "example-cushion-brush",
+      "status": "draft",
+      "source_language": "zh-CN",
+      "target_language": "en",
+      "source": "气垫梳",
+      "target": "cushion brush",
+      "contexts": ["product", "oem"],
+      "direction": "forward",
+      "forbidden_variants": [],
+      "notes": "示例词条；公开仓库中的种子词默认 draft，需人工确认后激活。"
+    },
+    {
+      "id": "example-lead-time",
+      "status": "draft",
+      "source_language": "zh-CN",
+      "target_language": "en",
+      "source": "交期",
+      "target": "lead time",
+      "contexts": ["customer_email", "quotation"],
+      "direction": "forward",
+      "forbidden_variants": [],
+      "notes": "仅用于说明 schema。"
+    }
+  ]
+}
