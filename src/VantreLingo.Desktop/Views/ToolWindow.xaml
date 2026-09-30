@@ -10,6 +10,7 @@
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,20">
       <Button DockPanel.Dock="Right" Content="设置" Click="Settings_Click" Margin="0" />
@@ -38,12 +39,19 @@
       <TextBox Grid.Row="1" Grid.Column="2" x:Name="OutputText" AcceptsReturn="True" AcceptsTab="True"
                TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" />
     </Grid>
-    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,16,0,12">
+    <WrapPanel Grid.Row="3" Margin="0,16,0,12">
       <Button x:Name="TranslateButton" Content="翻译" Click="Translate_Click" IsDefault="False" />
       <Button x:Name="CancelButton" Content="取消" Click="Cancel_Click" IsEnabled="False" />
       <Button x:Name="CopyButton" Content="复制译文" Click="Copy_Click" IsEnabled="False" />
-    </StackPanel>
-    <TextBlock Grid.Row="4" x:Name="StatusText" Text="输入文本，或在其他应用选中文字后按 Alt+D。"
+      <Button x:Name="ReplaceButton" Content="替换选区" Click="Replace_Click" IsEnabled="False" />
+      <Button x:Name="AppendButton" Content="追加译文" Click="Append_Click" IsEnabled="False" />
+    </WrapPanel>
+    <Expander Grid.Row="4" Header="文本 Diff（仅比较文字，不证明翻译正确）" Margin="0,0,0,8">
+      <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+        <TextBlock x:Name="DiffText" TextWrapping="Wrap" />
+      </ScrollViewer>
+    </Expander>
+    <TextBlock Grid.Row="5" x:Name="StatusText" Text="输入文本，或在其他应用选中文字后按 Alt+D。"
                Foreground="#647085" TextWrapping="Wrap" MaxHeight="100" />
   </Grid>
 </Window>

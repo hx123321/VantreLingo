@@ -71,7 +71,7 @@ M0 裁剪时必须为实际保留依赖建立清单，并核验其许可证。
 | `Core/ISingleInstanceApp.cs` | `src/VantreLingo.Desktop/Infrastructure/SingleInstance.cs` | 保留 Mutex / named pipe 生命周期；独立标识、当前用户限制、退出取消、仅拥有者释放 |
 | `Core/TranslationResultCoordinator.cs` | `src/VantreLingo.Core/Operations/OperationCoordinator.cs` | 保留操作编号及锁内检查/发布；删除词典、多结果通道和 WPF/插件依赖，加入取消所有权 |
 
-托盘继续使用上游的 Hardcodet WPF 组件，窗口改为标准 WPF，不保留完整上游 DI 注册或主题资源。`CaptureService` 是按架构要求收敛的唯一 UI Automation 选区入口；旧 `ClipboardHelper` 的超时读取旧剪贴板路径和 `InputHelper.PrintText` 盲写路径均未纳入宿主，兼容复制及可验证写回需在该入口上继续实现，不能引入第二套流程。
+托盘继续使用上游的 Hardcodet WPF 组件，窗口改为标准 WPF，不保留完整上游 DI 注册或主题资源。`CaptureService` 是按架构要求收敛的唯一 UI Automation 选区入口；旧 `ClipboardHelper` 的超时读取旧剪贴板路径和 `InputHelper.PrintText` 盲写路径均未纳入宿主，M1 在该入口内部增加标准 Unicode Win32 Edit 的可验证范围，并由 `NativeEditSelection` 完成受限原位替换；其他 UI Automation 控件仍只读/复制，没有引入剪贴板输入系统。该实现不复用上游盲贴路径，不新增依赖。
 
 正式工程没有传统引擎、词典、TTS、生词本、二维码、图片重绘、SQLite、云备份、插件市场、外部 HTTP 服务或更新服务的源码、包引用和启动注册。截图/OCR 入口本阶段暂未注册，不把未实现能力计作完成。
 

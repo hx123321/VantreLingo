@@ -93,6 +93,8 @@ public partial class App : Application
         _tool.Activate();
     }
 
+    internal void Notify(string text) => _tray?.ShowBalloonTip("VantreLingo", text, BalloonIcon.Info);
+
     internal void ShowSettings()
     {
         if (_tool is null || _exiting) return;

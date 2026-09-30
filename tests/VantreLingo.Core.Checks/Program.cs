@@ -144,7 +144,8 @@ Add("不落盘正文、历史或遥测设置", () =>
     var json = JsonSerializer.Serialize(new AppSettings(), JsonFormat.Options);
     Assert(!json.Contains("original_text") && !json.Contains("translation\""));
     Throws<InvalidDataException>(() => new AppSettings { Privacy = new() { Telemetry = true } }.Validate());
-    Throws<InvalidDataException>(() => new AppSettings { Writing = new() { Mode = "fast" } }.Validate());
+    new AppSettings { Writing = new() { Mode = "fast" } }.Validate();
+    Throws<InvalidDataException>(() => new AppSettings { Writing = new() { Mode = "automatic" } }.Validate());
 });
 Add("拒绝非加密远程地址和 URL 内凭据", () =>
 {
@@ -242,6 +243,118 @@ AddAsync("请求超时与用户取消区分", async () =>
     }));
     await ThrowsAsync<TimeoutException>(() => new OpenAiCompatibleClient(http, new() { Model = "test-model", TimeoutSeconds = 5 }, null)
         .TranslateAsync(new("你好", plan), CancellationToken.None));
+});
+
+// 可验证选区包含偏移和整个控件的上下文指纹，重复文本不能替代原范围。
+const string controlText = "prefix 你好 suffix 你好";
+var snapshot = new SelectionSnapshot(1, 42, 100, null, "Win32.Edit", "你好",
+    SelectionSnapshot.Hash("你好"), DateTimeOffset.UtcNow,
+    new SelectionLocator(200, 7, 9, SelectionSnapshot.Hash(controlText)));
+var selection = new SelectionState(42, 100, 200, 7, 9, controlText, true, true);
+
+Add("首次默认审查，快速模式可保存并恢复", () =>
+{
+    Assert(new AppSettings().Writing.Mode == "review");
+    var store = new JsonFileStore<AppSettings>(Path.Combine(temporaryRoot, "writing.json"), () => new(), s => s.Validate());
+    store.Save(new() { Writing = new() { Mode = "fast" } });
+    Assert(store.Load().Writing.Mode == "fast");
+});
+Add("阅读意图无论风险和目标状态都不能写回", () =>
+    Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Read, "Hello", []) is not null));
+Add("完整有效选区可进入快速写回", () =>
+    Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Fast, "Hello", []) is null));
+Add("切换窗口、进程、控件或焦点阻止写回", () =>
+{
+    foreach (var changed in new[]
+    {
+        selection with { ProcessId = 43 }, selection with { TopLevelWindow = 101 },
+        selection with { Control = 201 }, selection with { HasExpectedFocus = false },
+        selection with { IsWritable = false }
+    })
+    {
+        Assert(WritebackGate.Validate(snapshot, changed, WritebackIntent.Fast, "Hello", []) is not null);
+        Assert(WritebackGate.Validate(snapshot, changed, WritebackIntent.Review, "Hello", []) is not null);
+    }
+});
+Add("原文或上下文修改后审查和快速都不能写回", () =>
+{
+    foreach (var changed in new[] { selection with { Text = "prefix 你好 changed" }, selection with { Text = controlText.Replace("你好", "您好") } })
+    {
+        Assert(WritebackGate.Validate(snapshot, changed, WritebackIntent.Fast, "Hello", []) is not null);
+        Assert(WritebackGate.Validate(snapshot, changed, WritebackIntent.Review, "Hello", []) is not null);
+    }
+});
+Add("相同原文的另一处选区不能冒充原范围", () =>
+    Assert(WritebackGate.Validate(snapshot, selection with { Start = 17, End = 19 }, WritebackIntent.Fast, "Hello", []) is not null));
+Add("无法验证范围时只能审查复制", () =>
+{
+    Assert(WritebackGate.Validate(snapshot with { Locator = null }, selection, WritebackIntent.Fast, "Hello", []) is not null);
+    Assert(WritebackGate.Validate(snapshot with { Locator = null }, selection, WritebackIntent.Review, "Hello", []) is not null);
+});
+Add("损坏或越界的范围不会写入", () =>
+{
+    foreach (var changed in new[] { selection with { Start = -1 }, selection with { End = 200 }, selection with { End = 7 } })
+        Assert(WritebackGate.Validate(snapshot, changed, WritebackIntent.Fast, "Hello", []) is not null);
+    Assert(WritebackGate.Validate(snapshot with { OriginalHash = "invalid" }, selection, WritebackIntent.Fast, "Hello", []) is not null);
+});
+Add("风险阻止自动写回，人工审查仍可明确应用", () =>
+{
+    Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Fast, "Hello", ["risk"]) is not null);
+    Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Review, "Hello", ["risk"]) is null);
+});
+Add("空、过长及带空字符的结果不能写回", () =>
+{
+    foreach (var text in new[] { "", "  ", "hello\0world", new string('a', 30_001) })
+        Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Fast, text, []) is not null);
+});
+Add("追加一次提交原选区和译文，替换只提交译文", () =>
+{
+    Assert(WritebackGate.Replacement(snapshot, "Hello", WritebackAction.Append) == "你好Hello");
+    Assert(WritebackGate.Replacement(snapshot, "Hello", WritebackAction.Replace) == "Hello");
+});
+Add("取消和迟到操作无法进入写回或更新记忆", () =>
+{
+    using var coordinator = new OperationCoordinator();
+    using var first = coordinator.Begin();
+    using var latest = coordinator.Begin();
+    var applied = 0;
+    var memory = "ja";
+    void Apply() { applied++; memory = "fr"; }
+    Assert(!coordinator.TryPublish(first, Apply));
+    coordinator.Cancel();
+    Assert(!coordinator.TryPublish(latest, Apply));
+    Assert(applied == 0 && memory == "ja");
+});
+Add("保护中文相邻数字、单位、型号和代码", () =>
+{
+    foreach (var pair in new[]
+    {
+        (Source: "数量5000件", Target: "Quantity 500"),
+        (Source: "230 mm", Target: "230 cm"),
+        (Source: "USD 30", Target: "EUR 30"),
+        (Source: "型号SKU-ABC", Target: "Model SKU-XYZ"),
+        (Source: "Use `price = 30`", Target: "使用 `price = 40`"),
+        (Source: "${customer} {{quantity}}", Target: "${client} {{quantity}}")
+    }) Assert(TranslationContract.FindProtectionRisks(pair.Source, pair.Target).Count > 0);
+    Assert(TranslationContract.FindProtectionRisks("Use 230 mm SKU-ABC", "使用 230 mm SKU-ABC").Count == 0);
+});
+Add("新增明确承诺和遗漏否定或条件产生风险", () =>
+{
+    Assert(TranslationContract.FindProtectionRisks("Please quote.", "We guarantee delivery.").Count > 0);
+    Assert(TranslationContract.FindProtectionRisks("No logo.", "Add a logo.").Count > 0);
+    Assert(TranslationContract.FindProtectionRisks("Only when approved.", "Start production.").Count > 0);
+    Assert(TranslationContract.FindProtectionRisks("不要 Logo", "No logo").Count == 0);
+});
+Add("Diff 可还原原文和译文，支持空字符串和 emoji", () =>
+{
+    foreach (var pair in new[] { ("你好", "Hello"), ("same", "same"), ("", "hello"), ("hello", ""), ("A😀B", "A😁B"), ("😀", "😁😀") })
+    {
+        var diff = TextDifference.Between(pair.Item1, pair.Item2);
+        Assert(diff.Prefix + diff.Removed + diff.Suffix == pair.Item1);
+        Assert(diff.Prefix + diff.Added + diff.Suffix == pair.Item2);
+        Assert(diff.Prefix.Length == 0 || !char.IsHighSurrogate(diff.Prefix[^1]));
+        Assert(diff.Suffix.Length == 0 || !char.IsLowSurrogate(diff.Suffix[0]));
+    }
 });
 
 var failures = 0;

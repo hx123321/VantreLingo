@@ -18,6 +18,7 @@ public partial class SettingsWindow : Window
         TimeoutText.Text = provider.TimeoutSeconds.ToString();
         ReadHotkeyText.Text = app.Settings.Hotkeys.ReadTranslate;
         WriteHotkeyText.Text = app.Settings.Hotkeys.WriteTranslate;
+        WritingMode.SelectedValue = app.Settings.Writing.Mode;
         Closed += (_, _) => ApiKeyText.Clear();
     }
 
@@ -44,6 +45,7 @@ public partial class SettingsWindow : Window
             };
             var settings = _app.Settings with
             {
+                Writing = _app.Settings.Writing with { Mode = WritingMode.SelectedValue as string ?? "review" },
                 Hotkeys = _app.Settings.Hotkeys with
                 {
                     ReadTranslate = ReadHotkeyText.Text.Trim(),

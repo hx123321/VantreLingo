@@ -13,10 +13,10 @@ internal sealed class CaptureService
 
     public async Task<SelectionSnapshot?> CaptureAsync(long operationId, CancellationToken token)
     {
-        // 仅由明确热键触发；不读取剪贴板、全文或轮询外部窗口。
+        // 仅由明确热键触发；不读取剪贴板或轮询外部窗口。
         var foreground = GetForegroundWindow();
         _ = GetWindowThreadProcessId(foreground, out var processId);
-        if (foreground == 0 || processId == 0) return null;
+        if (foreground == 0 || processId == 0 || processId == Environment.ProcessId) return null;
         return await Task.Run(() => Capture(operationId, foreground, processId, token), token)
             .WaitAsync(TimeSpan.FromSeconds(3), token);
     }
@@ -26,6 +26,8 @@ internal sealed class CaptureService
         try
         {
             token.ThrowIfCancellationRequested();
+            var native = NativeEditSelection.Capture(operationId, foreground, (int)processId);
+            if (native is not null) return native;
             var element = AutomationElement.FocusedElement;
             if (element is null || element.Current.IsPassword || element.Current.ProcessId != processId ||
                 !element.TryGetCurrentPattern(TextPattern.Pattern, out var pattern))

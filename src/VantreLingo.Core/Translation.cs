@@ -65,8 +65,8 @@ public static class TranslationContract
 
     public static IReadOnlyList<string> FindProtectionRisks(string source, string translation)
     {
-        // 有限规则检查只用于审查提示，不证明完整语义等价，也不授权 OS 写回。
-        const string pattern = @"https?://[^\s<>]+|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}|\{\{[^{}]+\}\}|\$\{[^{}]+\}|\b\d+(?:[,./:-]\d+)*(?:\s?%)?";
+        // 有限规则检查用于风险提示和快速模式门控，不证明完整语义等价。
+        const string pattern = @"```[\s\S]*?```|`[^`\r\n]+`|https?://[^\s<>]+|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}|\{\{[^{}]+\}\}|\$\{[^{}]+\}|[A-Z][A-Z0-9]*(?:[-_][A-Z0-9]+)+|\d+(?:[,./:-]\d+)*(?:\s?%)?|\b(?:USD|EUR|GBP|CNY|RMB|JPY|mm|cm|kg|pcs)\b|[$€£¥]";
         var risks = new List<string>();
         var originals = Regex.Matches(source, pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
             .Select(m => m.Value).ToArray();
@@ -77,6 +77,21 @@ public static class TranslationContract
                 risks.Add("数字、链接、邮箱或模板变量可能被改变，请检查译文。");
         if (translated.Except(originals, StringComparer.Ordinal).Any())
             risks.Add("译文可能包含原文没有的数字或保护项，请检查。");
+        // 只检查明确的表面迹象；翻译成其他语言时可能保守地要求人工审查。
+        foreach (var rule in new[]
+        {
+            (Pattern: @"\b(?:guarantee(?:d|s)?|promise(?:d|s)?)\b|保证|承诺|保證|承諾", Added: true,
+                Message: "译文可能新增保证或承诺，请检查。"),
+            (Pattern: @"\b(?:not|no|never|without|cannot)\b|n't\b|不|没有|无需|禁止|沒有|無需", Added: false,
+                Message: "译文可能遗漏否定，请检查。"),
+            (Pattern: @"\b(?:if|unless|provided that|only when)\b|如果|除非|仅当|只有|僅當", Added: false,
+                Message: "译文可能遗漏条件，请检查。")
+        })
+        {
+            var inSource = Regex.IsMatch(source, rule.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            var inTarget = Regex.IsMatch(translation, rule.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+            if (rule.Added ? !inSource && inTarget : inSource && !inTarget) risks.Add(rule.Message);
+        }
         return risks.Distinct().ToArray();
     }
 

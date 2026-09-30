@@ -26,8 +26,15 @@
         <TextBlock Text="快捷键" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
         <TextBlock Text="阅读翻译（留空停用）" Margin="0,0,0,6" />
         <TextBox x:Name="ReadHotkeyText" Margin="0,0,0,12" />
-        <TextBlock Text="写作审查（留空停用）" Margin="0,0,0,6" />
+        <TextBlock Text="写作翻译（留空停用）" Margin="0,0,0,6" />
         <TextBox x:Name="WriteHotkeyText" Margin="0,0,0,12" />
+        <TextBlock Text="写作模式" Margin="0,0,0,6" />
+        <ComboBox x:Name="WritingMode" SelectedValuePath="Tag" Margin="0,0,0,8">
+          <ComboBoxItem Content="审查后应用（默认）" Tag="review" />
+          <ComboBoxItem Content="快速写回" Tag="fast" />
+        </ComboBox>
+        <TextBlock Text="快速模式仅对可验证选区的原生文本框自动写回；其他控件保留结果供主动查看和复制。焦点或原文变化、译文有风险时不会自动写入。"
+                   TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12" />
         <CheckBox x:Name="ClearLanguageCheck" Content="清除最近外语记忆" Margin="0,0,0,12" />
         <TextBlock Text="仅在主动翻译时向所选 Provider 发送输入文本。默认不保存正文或翻译历史，API key 由当前 Windows 用户加密保存。"
                    TextWrapping="Wrap" Foreground="#647085" />

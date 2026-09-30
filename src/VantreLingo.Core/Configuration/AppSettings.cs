@@ -24,8 +24,8 @@ public sealed record AppSettings
             LanguageRoutingService.ValidateCode(Language.FixedTarget);
         if (Language.Mode == "fixed" && Language.FixedTarget is null)
             throw new InvalidDataException("固定模式必须设置目标语言。");
-        if (Writing.Mode != "review")
-            throw new InvalidDataException("当前基座仅支持审查模式，尚未开放快速写回。");
+        if (Writing.Mode is not ("review" or "fast"))
+            throw new InvalidDataException("写作模式必须为 review 或 fast。");
         if (Privacy.SaveTranslationHistory || Privacy.SaveCustomerContent || Privacy.Telemetry || Privacy.AutoUpdate)
             throw new InvalidDataException("当前版本不支持历史、遥测或自动更新。");
     }

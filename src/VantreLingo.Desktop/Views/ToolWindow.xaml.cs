@@ -5,7 +5,10 @@ using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
 using VantreLingo.Core;
 using VantreLingo.Core.Operations;
 using VantreLingo.Desktop.Infrastructure;
@@ -18,9 +21,13 @@ public partial class ToolWindow : Window, IDisposable
     private readonly HttpClient _http;
     private readonly OperationCoordinator _operations = new();
     private readonly CaptureService _capture = new();
-    private bool _settingInput;
-    private bool _readOnly;
+    private Operation? _operation;
+    private bool _settingInput, _readOnly, _completed;
     private SelectionSnapshot? _snapshot;
+    private LanguagePlan? _languages;
+    private TranslationResult? _result;
+    private string _sourceText = "";
+    private string[] _warnings = [];
 
     internal ToolWindow(App app, HttpClient http)
     {
@@ -34,8 +41,7 @@ public partial class ToolWindow : Window, IDisposable
             .Prepend(new LanguageChoice("zh-TW", "繁體中文 · zh-TW")).ToArray();
         SourceLanguage.ItemsSource = choices.Prepend(new("auto", "自动识别")).ToArray();
         TargetLanguage.ItemsSource = choices.Prepend(new("smart", "智能目标")).ToArray();
-        SourceLanguage.SelectedIndex = 0;
-        TargetLanguage.SelectedIndex = 0;
+        SourceLanguage.SelectedIndex = TargetLanguage.SelectedIndex = 0;
         SourceLanguage.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(LanguageChanged));
         TargetLanguage.AddHandler(TextBox.TextChangedEvent, new TextChangedEventHandler(LanguageChanged));
         InputText.TextChanged += (_, _) =>
@@ -45,6 +51,13 @@ public partial class ToolWindow : Window, IDisposable
             OutputText.IsReadOnly = false;
             IntentLabel.Text = "输入翻译";
             ConfigurationChanged();
+        };
+        OutputText.TextChanged += (_, _) =>
+        {
+            if (!_completed) return;
+            UpdateRisksAndDiff();
+            UpdateActions();
+            SetResultStatus();
         };
         Closing += OnClosing;
         PreviewKeyDown += (_, e) =>
@@ -57,89 +70,84 @@ public partial class ToolWindow : Window, IDisposable
     }
 
     private void LanguageChanged(object sender, TextChangedEventArgs e) => ConfigurationChanged();
-
     internal void SetStatus(string text) => StatusText.Text = text;
-
     internal void ConfigurationChanged()
     {
         Cancel();
+        ResetResult();
+    }
+
+    private Operation BeginOperation()
+    {
+        var next = _operations.Begin();
+        _operation?.Dispose();
+        _operation = next;
+        ResetResult();
+        CancelButton.IsEnabled = true;
+        return next;
+    }
+
+    private void ResetResult()
+    {
+        _completed = false;
+        _result = null;
+        _languages = null;
+        _warnings = [];
         OutputText.Clear();
-        CopyButton.IsEnabled = false;
-        _snapshot = null;
+        DiffText.Inlines.Clear();
+        CopyButton.IsEnabled = ReplaceButton.IsEnabled = AppendButton.IsEnabled = false;
     }
 
     internal async Task CaptureAndTranslateAsync(bool readOnly)
     {
-        using var operation = _operations.Begin();
-        _operations.TryPublish(operation, () =>
-        {
-            CancelButton.IsEnabled = true;
-            SetStatus("正在读取选区…");
-        });
+        var fast = !readOnly && _app.Settings.Writing.Mode == "fast";
+        var operation = BeginOperation();
+        _snapshot = null;
+        _readOnly = readOnly;
+        SetStatus("正在读取选区…");
         try
         {
             var snapshot = await _capture.CaptureAsync(operation.Id, operation.Token);
             if (!_operations.TryPublish(operation, () =>
             {
-                _app.ShowTool();
-                CopyButton.IsEnabled = false;
-                OutputText.Clear();
+                if (!fast) _app.ShowTool();
                 if (snapshot is null)
                 {
-                    SetStatus("没有取得明确选区，或该控件不支持选区读取。请手动粘贴文本。");
+                    Report("没有取得明确选区，或该控件不支持选区读取。请手动粘贴文本。", fast);
                     return;
                 }
                 _settingInput = true;
                 try { InputText.Text = snapshot.OriginalText; }
                 finally { _settingInput = false; }
                 _snapshot = snapshot;
-                _readOnly = readOnly;
                 OutputText.IsReadOnly = readOnly;
-                IntentLabel.Text = readOnly ? "阅读翻译" : "写作审查 · 可编辑并复制译文";
+                IntentLabel.Text = readOnly ? "阅读翻译 · 只读" : fast ? "快速翻译" : "写作审查 · 检查后应用";
             }) || snapshot is null) return;
-            await TranslateAsync(operation);
+            await TranslateAsync(operation, fast);
         }
         catch (OperationCanceledException) { }
-        catch (TimeoutException)
+        catch (Exception ex)
         {
-            _operations.TryPublish(operation, () =>
-            {
-                _app.ShowTool();
-                SetStatus("选区读取超时，请手动粘贴文本。");
-            });
+            _operations.TryPublish(operation, () => Report(ex is TimeoutException
+                ? "选区读取超时，请手动粘贴文本。" : "无法读取选区，请手动粘贴文本。", fast));
         }
-        catch (Exception)
-        {
-            _operations.TryPublish(operation, () => SetStatus("无法读取选区，请手动粘贴文本。"));
-        }
-        finally
-        {
-            _operations.TryPublish(operation, () => CancelButton.IsEnabled = false);
-        }
+        finally { _operations.TryPublish(operation, () => CancelButton.IsEnabled = _completed); }
     }
 
     private async void Translate_Click(object sender, RoutedEventArgs e)
     {
-        using var operation = _operations.Begin();
-        await TranslateAsync(operation);
+        var operation = BeginOperation();
+        if (_snapshot is not null) _snapshot = _snapshot with { OperationId = operation.Id };
+        // 浮窗内重试始终先审查，不能从浮窗自动写回。
+        await TranslateAsync(operation, fast: false);
     }
 
-    private static string Code(ComboBox box)
-    {
-        if (box.SelectedItem is LanguageChoice choice && box.Text == choice.Label)
-            return choice.Code;
-        return box.Text.Trim();
-    }
+    private static string Code(ComboBox box) =>
+        box.SelectedItem is LanguageChoice choice && box.Text == choice.Label ? choice.Code : box.Text.Trim();
 
-    private async Task TranslateAsync(Operation operation)
+    private async Task TranslateAsync(Operation operation, bool fast)
     {
-        _operations.TryPublish(operation, () =>
-        {
-            OutputText.Clear();
-            CopyButton.IsEnabled = false;
-            CancelButton.IsEnabled = true;
-            SetStatus("正在翻译…");
-        });
+        SetStatus("正在翻译…");
         try
         {
             var source = Code(SourceLanguage);
@@ -149,25 +157,27 @@ public partial class ToolWindow : Window, IDisposable
             var provider = _app.Providers.Selected;
             var client = new OpenAiCompatibleClient(_http, provider, DpapiSecretStore.Decrypt(provider.EncryptedApiKey));
             var result = await client.TranslateAsync(new TranslationRequest(text, languages), operation.Token);
-            var risks = TranslationContract.FindProtectionRisks(text, result.Translation);
             _operations.TryPublish(operation, () =>
             {
+                _languages = languages;
+                _result = result;
+                _sourceText = text;
                 OutputText.Text = result.Translation;
-                CopyButton.IsEnabled = true;
-                var warnings = result.Warnings.Concat(risks).ToList();
-                // 写作审查尚未原位应用，不提交写作语言记忆；风险结果也不更新记忆。
-                var memory = LanguageRoutingService.MemoryCandidate(languages, result);
-                if ((_readOnly || _snapshot is null) && risks.Count == 0 && result.Warnings.Length == 0 &&
-                    TranslationContract.HasLanguageEvidence(text) && memory is not null)
+                _completed = true;
+                UpdateRisksAndDiff();
+                UpdateActions();
+                SetResultStatus();
+                if (fast)
                 {
-                    try { _app.CommitLanguage(memory); }
-                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    // 所有权临界区内校验、一次写回和提交记忆；旧请求不能产生任何副作用。
+                    var error = Apply(WritebackIntent.Fast, WritebackAction.Replace);
+                    if (error is not null)
                     {
-                        warnings.Add("译文已完成，但最近外语未能保存。");
+                        IntentLabel.Text = "快速写回已阻止 · 可主动审查和复制";
+                        Report(error, fast: true);
                     }
                 }
-                SetStatus($"{result.SourceLanguage} → {result.TargetLanguage}" +
-                    (warnings.Count > 0 ? "\n" + string.Join("\n", warnings) : " · 完成，请检查后使用。"));
+                else if (_readOnly || _snapshot is null) CommitLanguage();
             });
         }
         catch (OperationCanceledException) { }
@@ -176,40 +186,114 @@ public partial class ToolWindow : Window, IDisposable
             var message = ex switch
             {
                 InvalidDataException => ex.Message,
-                TimeoutException => "Provider 请求超时，请检查服务后重试。",
+                TimeoutException => "Provider 请求超时，原文保持不变。",
                 HttpRequestException http => http.StatusCode is { } code
                     ? $"Provider 请求失败（HTTP {(int)code}），请检查设置。"
                     : "无法连接 Provider，请检查网络和地址。",
                 _ => "翻译失败，请检查设置后重试。"
             };
-            _operations.TryPublish(operation, () => SetStatus(message));
+            _operations.TryPublish(operation, () => Report(message, fast));
         }
-        finally
+        finally { _operations.TryPublish(operation, () => CancelButton.IsEnabled = _completed); }
+    }
+
+    private void UpdateRisksAndDiff()
+    {
+        if (_result is null) return;
+        _warnings = _result.Warnings.Concat(TranslationContract.FindProtectionRisks(_sourceText, OutputText.Text))
+            .Concat(!_result.SourceConfident || !TranslationContract.HasLanguageEvidence(_sourceText)
+                ? new[] { "源语言存在歧义或缺乏语言证据，请手动确认。" } : []).Distinct().ToArray();
+        var diff = TextDifference.Between(_sourceText, OutputText.Text);
+        DiffText.Inlines.Clear();
+        DiffText.Inlines.Add(new Run(diff.Prefix));
+        DiffText.Inlines.Add(new Run(diff.Removed) { Background = Brushes.MistyRose, TextDecorations = TextDecorations.Strikethrough });
+        DiffText.Inlines.Add(new Run(diff.Added) { Background = Brushes.Honeydew });
+        DiffText.Inlines.Add(new Run(diff.Suffix));
+    }
+
+    private void UpdateActions()
+    {
+        CopyButton.IsEnabled = _completed && !string.IsNullOrWhiteSpace(OutputText.Text);
+        ReplaceButton.IsEnabled = AppendButton.IsEnabled = CopyButton.IsEnabled && !_readOnly && _snapshot?.Locator is not null;
+    }
+
+    private void SetResultStatus()
+    {
+        if (_result is null) return;
+        SetStatus($"{_result.SourceLanguage} → {_result.TargetLanguage}" +
+            (_warnings.Length > 0 ? "\n" + string.Join("\n", _warnings) : " · 完成，请检查后使用。") +
+            (!_readOnly && _snapshot is { Locator: null } ? "\n该控件仅支持审查和复制。" : ""));
+    }
+
+    private string? Apply(WritebackIntent intent, WritebackAction action)
+    {
+        if (_readOnly || !_completed || _snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
+            return "当前结果没有有效的写作选区，请重新选择并翻译。";
+        UpdateRisksAndDiff(); // 人工编辑后重新检查保护项。
+        var error = NativeEditSelection.Apply(_snapshot, OutputText.Text, intent, action, _warnings,
+            new WindowInteropHelper(this).Handle, out var attempted);
+        // 已向控件发送写入时，即使超时或校验不确定，也禁止再次使用旧快照。
+        if (attempted)
         {
-            _operations.TryPublish(operation, () => CancelButton.IsEnabled = false);
+            _snapshot = null;
+            UpdateActions();
         }
+        if (error is not null) return error;
+        CommitLanguage(); // 只有确认完整写回后提交写作记忆。
+        SetStatus(_warnings.Length == 0 ? "已完整写回原选区。" : "已完整写回原选区；" + string.Join("\n", _warnings));
+        return null;
+    }
+
+    private void CommitLanguage()
+    {
+        if (_warnings.Length != 0 || _languages is null || _result is null) return;
+        var memory = LanguageRoutingService.MemoryCandidate(_languages, _result);
+        if (memory is null) return;
+        try { _app.CommitLanguage(memory); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _warnings = [.. _warnings, "译文已完成，但最近外语未能保存。"];
+            SetResultStatus();
+        }
+    }
+
+    private void Replace_Click(object sender, RoutedEventArgs e) => ApplyReview(WritebackAction.Replace);
+    private void Append_Click(object sender, RoutedEventArgs e) => ApplyReview(WritebackAction.Append);
+    private void ApplyReview(WritebackAction action)
+    {
+        if (_operation is null) return;
+        _operations.TryPublish(_operation, () =>
+        {
+            var error = Apply(WritebackIntent.Review, action);
+            if (error is not null) SetStatus(error);
+        });
+    }
+
+    private void Report(string message, bool fast)
+    {
+        SetStatus(message);
+        if (fast) _app.Notify(message); // 托盘气泡不激活工具窗口。
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => Cancel();
-
     private void Cancel()
     {
         _operations.Cancel();
-        CancelButton.IsEnabled = false;
-        SetStatus("输入或调整语言后可重新翻译。");
+        _completed = false;
+        _snapshot = null;
+        CopyButton.IsEnabled = ReplaceButton.IsEnabled = AppendButton.IsEnabled = CancelButton.IsEnabled = false;
+        SetStatus("已取消。输入或调整语言后可重新翻译。");
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => _app.ShowSettings();
-
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
-        if (!CopyButton.IsEnabled || string.IsNullOrWhiteSpace(OutputText.Text)) return;
-        try
+        if (_operation is null || !CopyButton.IsEnabled || string.IsNullOrWhiteSpace(OutputText.Text)) return;
+        _operations.TryPublish(_operation, () =>
         {
-            Clipboard.SetText(OutputText.Text);
-            SetStatus("译文已复制。");
-        }
-        catch (COMException) { SetStatus("剪贴板暂时被占用，请稍后重试。"); }
+            try { Clipboard.SetText(OutputText.Text); SetStatus("译文已复制。"); }
+            catch (COMException) { SetStatus("剪贴板暂时被占用，请稍后重试。"); }
+        });
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)
@@ -220,6 +304,10 @@ public partial class ToolWindow : Window, IDisposable
         Hide();
     }
 
-    public void Dispose() => _operations.Dispose();
+    public void Dispose()
+    {
+        _operations.Dispose();
+        _operation?.Dispose();
+    }
     private sealed record LanguageChoice(string Code, string Label);
 }
