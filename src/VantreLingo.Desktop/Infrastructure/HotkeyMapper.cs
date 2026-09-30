@@ -10,9 +10,9 @@ using VantreLingo.Core.Configuration;
 
 namespace VantreLingo.Desktop.Infrastructure;
 
-internal sealed class HotkeyMapper(Action read, Action review) : IDisposable
+internal sealed class HotkeyMapper(Action read, Action review, Action ocr) : IDisposable
 {
-    private HotkeySettings _current = new() { ReadTranslate = "", WriteTranslate = "" };
+    private HotkeySettings _current = new() { ReadTranslate = "", WriteTranslate = "", ScreenshotOcr = "" };
 
     public bool TryApply(HotkeySettings settings, out string error)
     {
@@ -43,8 +43,9 @@ internal sealed class HotkeyMapper(Action read, Action review) : IDisposable
     {
         var read = Parse(settings.ReadTranslate);
         var write = Parse(settings.WriteTranslate);
-        if (read is not null && write is not null && read.Value.Equals(write.Value))
-            throw new InvalidDataException("阅读和审查热键不能相同。");
+        var screenshot = Parse(settings.ScreenshotOcr);
+        if (new[] { read, write, screenshot }.OfType<HotkeyModel>().GroupBy(h => h).Any(g => g.Count() > 1))
+            throw new InvalidDataException("阅读、写作和截图热键不能相同。");
     }
 
     private static HotkeyModel? Parse(string text)
@@ -61,7 +62,7 @@ internal sealed class HotkeyMapper(Action read, Action review) : IDisposable
     {
         Add("VantreLingo.Read", settings.ReadTranslate, read);
         Add("VantreLingo.Review", settings.WriteTranslate, review);
-        // Alt+S 仅保留在配置中；OCR 接通前不占用热键。
+        Add("VantreLingo.Ocr", settings.ScreenshotOcr, ocr);
     }
 
     private static void Add(string id, string text, Action action)
@@ -78,6 +79,7 @@ internal sealed class HotkeyMapper(Action read, Action review) : IDisposable
     {
         HotkeyManager.Current.Remove("VantreLingo.Read");
         HotkeyManager.Current.Remove("VantreLingo.Review");
+        HotkeyManager.Current.Remove("VantreLingo.Ocr");
     }
 
     public void Dispose() => Remove();

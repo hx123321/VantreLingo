@@ -28,12 +28,16 @@ public partial class ToolWindow : Window, IDisposable
     private TranslationResult? _result;
     private string _sourceText = "";
     private string[] _warnings = [];
+    private bool _refreshingStyles;
+    private StylePreset? _requestStyle;
+    private IReadOnlyList<GlossaryMatch> _matchedTerms = [];
 
     internal ToolWindow(App app, HttpClient http)
     {
         _app = app;
         _http = http;
         InitializeComponent();
+        RefreshStyles();
         var choices = CultureInfo.GetCultures(CultureTypes.NeutralCultures)
             .Where(c => !string.IsNullOrEmpty(c.Name))
             .Select(c => new LanguageChoice(c.Name, $"{c.NativeName} · {c.Name}"))
@@ -69,6 +73,25 @@ public partial class ToolWindow : Window, IDisposable
         };
     }
 
+    internal void RefreshStyles()
+    {
+        _refreshingStyles = true;
+        try
+        {
+            StyleList.ItemsSource = _app.Presets.Presets;
+            StyleList.SelectedItem = _app.Presets.Presets.FirstOrDefault(p => p.Id == _app.Settings.Writing.DefaultPreset) ?? _app.Presets.Presets[0];
+        }
+        finally { _refreshingStyles = false; }
+    }
+    private void Style_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_refreshingStyles || StyleList.SelectedItem is not StylePreset preset) return;
+        ConfigurationChanged();
+        try { _app.SelectStyle(preset.Id); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus("风格选择未能保存。当前选择仍可使用。"); }
+    }
+    private void Library_Click(object sender, RoutedEventArgs e) => _app.ShowLibrary();
+
     private void LanguageChanged(object sender, TextChangedEventArgs e) => ConfigurationChanged();
     internal void SetStatus(string text) => StatusText.Text = text;
     internal void ConfigurationChanged()
@@ -83,6 +106,7 @@ public partial class ToolWindow : Window, IDisposable
         _operation?.Dispose();
         _operation = next;
         ResetResult();
+        ResetInquiry();
         CancelButton.IsEnabled = true;
         return next;
     }
@@ -100,6 +124,7 @@ public partial class ToolWindow : Window, IDisposable
 
     internal async Task CaptureAndTranslateAsync(bool readOnly)
     {
+        TranslationView();
         var fast = !readOnly && _app.Settings.Writing.Mode == "fast";
         var operation = BeginOperation();
         _snapshot = null;
@@ -136,6 +161,7 @@ public partial class ToolWindow : Window, IDisposable
 
     private async void Translate_Click(object sender, RoutedEventArgs e)
     {
+        TranslationView();
         var operation = BeginOperation();
         if (_snapshot is not null) _snapshot = _snapshot with { OperationId = operation.Id };
         // 浮窗内重试始终先审查，不能从浮窗自动写回。
@@ -154,14 +180,20 @@ public partial class ToolWindow : Window, IDisposable
             var target = Code(TargetLanguage);
             var languages = LanguageRoutingService.Plan(source, target == "smart" ? null : target, _app.Settings.Language);
             var text = InputText.Text;
+            var style = ((StyleList.SelectedItem as StylePreset) ?? _app.Presets.Presets[0]).Normalized();
+            style.Validate();
+            if (fast && !style.CanUseFast) throw new InvalidDataException("当前自定义提示未获快速授权，请先成功测试并明确授权。");
+            var glossary = _app.Glossary;
             var provider = _app.Providers.Selected;
             var client = new OpenAiCompatibleClient(_http, provider, DpapiSecretStore.Decrypt(provider.EncryptedApiKey));
-            var result = await client.TranslateAsync(new TranslationRequest(text, languages), operation.Token);
+            var result = await client.TranslateAsync(new TranslationRequest(text, languages, style, glossary), operation.Token);
             _operations.TryPublish(operation, () =>
             {
                 _languages = languages;
                 _result = result;
                 _sourceText = text;
+                _requestStyle = style;
+                _matchedTerms = glossary.Match(text, result.SourceLanguage, result.TargetLanguage, style.Contexts());
                 OutputText.Text = result.Translation;
                 _completed = true;
                 UpdateRisksAndDiff();
@@ -177,7 +209,15 @@ public partial class ToolWindow : Window, IDisposable
                         Report(error, fast: true);
                     }
                 }
-                else if (_readOnly || _snapshot is null) CommitLanguage();
+                else
+                {
+                    if (_warnings.Length == 0)
+                    {
+                        try { _app.MarkPresetTested(style); }
+                        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus("译文完成，但提示测试记录未能保存。"); }
+                    }
+                    if (_readOnly || _snapshot is null) CommitLanguage();
+                }
             });
         }
         catch (OperationCanceledException) { }
@@ -201,6 +241,8 @@ public partial class ToolWindow : Window, IDisposable
     {
         if (_result is null) return;
         _warnings = _result.Warnings.Concat(TranslationContract.FindProtectionRisks(_sourceText, OutputText.Text))
+            .Concat(GlossaryCatalog.FindRisks(OutputText.Text, _matchedTerms))
+            .Concat(_requestStyle?.Scene == "formal_document" ? FormalContentValidator.FindRisks(_sourceText, OutputText.Text) : [])
             .Concat(!_result.SourceConfident || !TranslationContract.HasLanguageEvidence(_sourceText)
                 ? new[] { "源语言存在歧义或缺乏语言证据，请手动确认。" } : []).Distinct().ToArray();
         var diff = TextDifference.Between(_sourceText, OutputText.Text);
@@ -281,6 +323,7 @@ public partial class ToolWindow : Window, IDisposable
         _operations.Cancel();
         _completed = false;
         _snapshot = null;
+        ResetInquiry();
         CopyButton.IsEnabled = ReplaceButton.IsEnabled = AppendButton.IsEnabled = CancelButton.IsEnabled = false;
         SetStatus("已取消。输入或调整语言后可重新翻译。");
     }

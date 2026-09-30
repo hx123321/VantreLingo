@@ -2,7 +2,7 @@
 
 面向 Windows 的轻量 LLM 语言小工具：**翻译、截图取字、本地术语、客户信息与缺项整理**。
 
-> 已落地 M0 最小宿主与 M1 翻译/受限写回实现；完整 v0.1 尚未完成。Windows 真实运行和安全写回验收仍待执行，实施范围见 [Issue #1](https://github.com/hx123321/VantreLingo/issues/1)。
+> 已接通四项功能的 v0.1 实现；Windows 11 完整实机验收尚未完成，实施范围见 [Issue #1](https://github.com/hx123321/VantreLingo/issues/1)。
 
 ## 当前可运行基座
 
@@ -14,7 +14,13 @@
 - 智能语言路由、可搜索语言选择、最近有效外语记忆，以及基础数字/URL/邮箱/模板变量风险提示。
 - 版本化 JSON、原子文件替换、DPAPI CurrentUser 密钥存储；没有正文日志或历史库。
 
-**完整风格/术语、客户整理和截图 OCR 尚未接通**。`Alt+S` 仅保留配置值，暂不注册。浏览器、VS Code、Word、RichEdit 及其他未验证控件不提供自动写回；能读取明确选区时支持审查/复制，否则使用手动粘贴。没有模拟复制或粘贴路径，不发送 `Ctrl+A` 或 Enter。数字、国际单位、型号、代码、URL、邮箱、模板变量以及部分否定/条件/新增承诺规则用于保守风险门控，不能证明完整语义等价。
+- 可组合风格编辑、导入/导出、本地冲突校验；正式文件锁定严格忠实，自定义提示需成功测试并明确授权才能快速应用，修改或导入后授权失效。
+- 本地 JSON 术语 CRUD、启停、草稿/激活、双向匹配、最长短语优先、上下文/词边界、冲突检查、允许及禁用变体。
+- 客户信息、分产品需求、缺项/歧义/冲突、建议追问四区；原文证据及产品独立范围校验，人工修改、复制 Markdown/JSON 和显式另存。
+- `Alt+S` 主动框选、本地 Windows OCR、识别文本编辑后主动翻译/整理。**OCR 需要 MSIX 身份和系统已安装的语言能力**；普通 EXE 支持其余功能，不自动上传截图或下载模型。
+- 多 Provider 管理、固定/智能目标语言、模式及快捷键设置、OCR 已安装语言选择；普通设置导出不包含密钥或密文。
+
+浏览器、VS Code、Word、RichEdit 及其他未验证控件不提供自动写回；能读取明确选区时支持审查/复制，否则使用手动粘贴。没有模拟复制或粘贴路径，不发送 `Ctrl+A` 或 Enter。保护规则不能证明完整语义等价。
 
 原生写回仍需 Windows 实机验收。Win32 没有跨进程的原子文本条件替换；本实现发送前两次验证完整上下文和范围、发送后核对完整文本，但不能仅凭 Core 检查证明并发编辑绝无竞争窗口。写入超时或状态不确定时消费快照、不重试、不自动恢复，也不更新语言记忆。默认审查，用户需在设置里主动切换快速模式；尚未将任何应用标为已通过 A/B 级兼容。测试步骤和支持边界见 [M1 验证记录](docs/M1-VALIDATION.md)。
 
@@ -35,14 +41,16 @@
 ./scripts/build.sh publish
 ```
 
-运行 `artifacts/win-x64/VantreLingo.exe`，首次在“设置”中填写 Provider API 基础地址、模型和密钥。发布包依赖 **.NET 10 Desktop Runtime x64**，不需要 SDK；下载地址：[Microsoft .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)。Provider 须支持 Chat Completions 的 `response_format: json_object`，不支持时明确失败，不静默降级。当前环境没有真实 Provider 凭据，HTTP 检查使用内存模拟响应。
+运行 `artifacts/win-x64/VantreLingo.exe`，首次在“设置”中填写 Provider API 基础地址、模型和密钥。发布包依赖 **.NET 10 Desktop Runtime x64**，不需要 SDK；下载地址：[Microsoft .NET 10](https://dotnet.microsoft.com/download/dotnet/10.0)。OCR 安装与打包步骤见 [MSIX / OCR](docs/PACKAGING.md)。Provider 须支持 Chat Completions 的 `response_format: json_object`，不支持时明确失败，不静默降级。当前环境没有真实 Provider 凭据，HTTP 检查使用内存模拟响应。
 
 ## 文件约定
 
 ```text
 src/VantreLingo.Desktop/       Windows 宿主及唯一选区捕获入口
 src/VantreLingo.Core/          配置、路由、请求隔离、LLM 协议
-tests/VantreLingo.Core.Checks/ 必要回归检查；不进入发布包
+tests/VantreLingo.Core.Checks/ 跨平台规则回归检查；不进入发布包
+tests/VantreLingo.Windows.Checks/ Windows 原生互操作检查；不进入发布包
+packaging/                    MSIX 清单和标识图标
 scripts/                      验证、发布与固定上游检查脚本
 licenses/                     上游与实际保留依赖的许可证
 artifacts/win-x64/             可运行结果；不提交 Git
@@ -51,11 +59,11 @@ artifacts/win-x64/             可运行结果；不提交 Git
 
 只保留必要源码、构建入口、锁文件和既有产品文档，不将完整上游放进正式源码树。`.tmp` 可整体删除后重建；上游检查副本只允许放在 `.tmp`。普通 `dotnet build` 也会将中间产物和 NuGet 包放入 `.tmp`，推荐使用脚本，让 CLI/HTTP 缓存及临时目录同样集中在此处。
 
-运行时设置只写到 `%LocalAppData%/VantreLingo/settings.json` 与 `providers.json`，写入临时文件在该目录的 `.tmp`。Provider 元数据示例见 [providers.example.json](examples/providers.example.json)。损坏或未知版本的配置不会被默认值覆盖；API key 密文绑定原 Windows 用户，不应当作可迁移的明文配置。默认不保存原文、译文、选区或客户正文。
+运行时设置只写到 `%LocalAppData%/VantreLingo/settings.json` 、`providers.json`、`presets.json` 与 `glossary.json`，写入临时文件在该目录的 `.tmp`。Provider 元数据示例见 [providers.example.json](examples/providers.example.json)。损坏或未知版本的配置不会被默认值覆盖；API key 密文绑定原 Windows 用户，不应当作可迁移的明文配置。默认不保存原文、译文、选区或客户正文。
 
 ## 本次验证边界
 
-2026-10-01 在 Debian 13 x64、.NET SDK 10.0.401 / Runtime 10.0.12 上执行锁定恢复、Release 交叉编译及 41 项 Core 检查。发布目标为 Windows x64，未在 Linux 执行 WPF。托盘、全局热键、真实 UI Automation 控件兼容性、原生写回和 DPAPI 仍需 Windows 11 实机验证；没有将其记录为验收通过。完整 v0.1 继续按 [验收要求](docs/ACCEPTANCE.md) 推进。
+2026-10-01 在 Debian 13 x64、.NET SDK 10.0.401 / Runtime 10.0.12 上执行锁定恢复、Release 交叉编译及 61 项 Core 检查。发布目标为 Windows x64，未在 Linux 执行 WPF。托盘、全局热键、真实 UI Automation 控件兼容性、原生写回和 DPAPI 仍需 Windows 11 实机验证；没有将其记录为验收通过。Windows CI 会构建、执行隔离原生控件/DPAPI 检查并验证未签名 MSIX；它不代替 Windows 11 用户环境的完整验收。实现和 P0 证据映射见 [交付验证记录](docs/V0.1-VALIDATION.md)。
 
 ## v0.1 只做四件事
 

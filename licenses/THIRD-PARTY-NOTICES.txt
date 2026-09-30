@@ -283,3 +283,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+Windows OCR interoperability
+---------------------------
+Microsoft.Windows.SDK.NET.Ref 10.0.19041.57
+Publisher: Microsoft Corporation
+Package: https://www.nuget.org/packages/Microsoft.Windows.SDK.NET.Ref/10.0.19041.57
+Package license URL: https://aka.ms/WinSDKLicenseURL
+The SDK targeting pack is not declared MIT as a whole. Its Microsoft Software
+License Terms are retained unchanged in Microsoft.Windows.SDK.LICENSE.rtf.
+The publish output includes the generated Windows API projection assembly and
+WinRT.Runtime.dll used to call local Windows OCR APIs. C#/WinRT is provided by
+https://github.com/microsoft/CsWinRT under the MIT license; its complete license
+is retained in CsWinRT.MIT.txt. The Windows.Media.Ocr engine and language models
+remain operating-system components, are not bundled, and are not downloaded
+by this application. Windows SDK tools and reference/analyzer assemblies are
+not part of the application's runtime package.

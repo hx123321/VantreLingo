@@ -357,6 +357,174 @@ Add("Diff 可还原原文和译文，支持空字符串和 emoji", () =>
     }
 });
 
+Add("风格冲突在编辑、导入和执行前统一拒绝", () =>
+{
+    foreach (var style in new[]
+    {
+        new StylePreset { Scene = "formal_document", Tone = "humorous", Fidelity = "strict" },
+        new StylePreset { Scene = "formal_document", Persona = "lively", Fidelity = "strict" },
+        new StylePreset { Fidelity = "strict", Length = "concise" },
+        new StylePreset { Tone = "humorous", Persona = "literal_rigid" }
+    })
+    {
+        Throws<InvalidDataException>(style.Validate);
+        Throws<InvalidDataException>(() => new PresetCatalog { Presets = [style] }.Validate());
+        Throws<InvalidDataException>(() => TranslationContract.ComposePrompt(new("你好", plan, style)));
+    }
+    Assert(new StylePreset { Scene = "formal_document" }.Normalized().Fidelity == "strict");
+});
+Add("自定义提示测试并授权，修改后失效，导入不可继承授权", () =>
+{
+    var style = new StylePreset { CustomPrompt = "使用简洁商务表达" };
+    Assert(!style.CanUseFast);
+    Throws<InvalidDataException>(() => style.ApproveFast());
+    var approved = style.Tested().ApproveFast();
+    Assert(approved.CanUseFast);
+    Assert(!(approved with { CustomPrompt = "换一种表达" }).CanUseFast);
+    Assert(!(approved with { Tone = "humorous" }).CanUseFast);
+    Assert(!new PresetCatalog { Presets = [approved] }.Imported().Presets[0].CanUseFast);
+});
+Add("公开示例可导入，术语种子保持草稿", () =>
+{
+    var presets = JsonSerializer.Deserialize<PresetCatalog>(File.ReadAllText("examples/presets.example.json"), JsonFormat.Options)!;
+    var glossary = JsonSerializer.Deserialize<GlossaryCatalog>(File.ReadAllText("examples/glossary.example.json"), JsonFormat.Options)!;
+    presets.Validate(); glossary.Validate();
+    Assert(glossary.Terms.All(t => t.Status == "draft"));
+    Assert(glossary.Match("气垫梳", "zh-CN", "en", ["product"]).Count == 0);
+});
+Add("术语最长短语优先并遵守语言和上下文", () =>
+{
+    var glossary = new GlossaryCatalog { Terms = [
+        new() { Id = "short", Status = "active", Source = "梳", Target = "comb", Contexts = ["product"] },
+        new() { Id = "long", Status = "active", Source = "气垫梳", Target = "cushion brush", Contexts = ["product"] }] };
+    var matches = glossary.Match("这款气垫梳", "zh-CN", "en", ["product"]);
+    Assert(matches.Count == 1 && matches[0].Source == "气垫梳");
+    Assert(glossary.Match("气垫梳", "zh-CN", "ja", ["product"]).Count == 0);
+    Assert(glossary.Match("气垫梳", "zh-CN", "en", ["software"]).Count == 0);
+    Assert(glossary.Candidates("气垫梳", LanguageRoutingService.Plan("auto", "ja", new()), ["product"]).Count == 0);
+});
+Add("术语方向与拉丁词边界，草稿和禁用词不应用", () =>
+{
+    var glossary = new GlossaryCatalog { Terms = [new() { Id = "one", Status = "active", SourceLanguage = "en", TargetLanguage = "zh-CN", Source = "brush", Target = "刷", Direction = "both" }] };
+    Assert(glossary.Match("brush toothbrush brushes", "en", "zh-CN", []).Count == 1);
+    Assert(glossary.Match("刷", "zh-CN", "en", []).Single().Target == "brush");
+    Assert((glossary with { Terms = [glossary.Terms[0] with { Status = "disabled" }] }).Match("brush", "en", "zh-CN", []).Count == 0);
+});
+Add("冲突 active 术语拒绝保存，重叠上下文和语言变体也拒绝", () =>
+{
+    var a = new GlossaryTerm { Id = "a", Status = "active", SourceLanguage = "en", TargetLanguage = "zh-CN", Source = "brush", Target = "刷", Contexts = ["product"] };
+    var b = a with { Id = "b", SourceLanguage = "en-US", Target = "梳", Contexts = ["product", "oem_manufacturing"] };
+    Throws<InvalidDataException>(() => new GlossaryCatalog { Terms = [a, b] }.Validate());
+    new GlossaryCatalog { Terms = [a, b with { Status = "draft" }] }.Validate();
+    new GlossaryCatalog { Terms = [a, b with { Contexts = ["software"] }] }.Validate();
+});
+Add("允许变体与禁用旧词的译后校验", () =>
+{
+    var g = new GlossaryCatalog { Terms = [new() { Status = "active", Source = "气垫梳", Target = "cushion brush", AllowedVariants = ["cushioned brush"], ForbiddenVariants = ["air comb"] }] };
+    var matched = g.Match("气垫梳", "zh-CN", "en", []);
+    Assert(GlossaryCatalog.FindRisks("cushioned brush", matched).Count == 0);
+    Assert(GlossaryCatalog.FindRisks("air comb", matched).Count > 0);
+    Assert(GlossaryCatalog.FindRisks("cushion brush and air comb", matched).Count > 0);
+});
+Add("完整配置 Prompt 中保留风格和语言限定术语", () =>
+{
+    var prompt = TranslationContract.ComposePrompt(new("气垫梳", plan, new() { Scene = "product" },
+        new() { Terms = [new() { Status = "active", Source = "气垫梳", Target = "cushion brush" }] }));
+    Assert(prompt.Contains("cushion brush") && prompt.Contains("source_language") && prompt.Contains("product"));
+});
+Add("正式文件责任主体、义务强度和格式变化产生风险", () =>
+{
+    Assert(FormalContentValidator.FindRisks("We shall deliver.", "我方应当交付。").Count == 0);
+    Assert(FormalContentValidator.FindRisks("We shall deliver.", "贵方可以交付。").Count > 0);
+    Assert(FormalContentValidator.FindRisks("Line one\nLine two", "Combined line").Count > 0);
+    Assert(TranslationContract.FindProtectionRisks("尺寸230mm", "Size 230cm").Count > 0);
+});
+Add("模型无证据公司名和不支持的字段值不会显示为 known", () =>
+{
+    var report = InquiryService.Validate("Please quote brushes.", new() { Customer = new() { ["company"] = new() { Status = "known", Value = "Invented Ltd", Evidence = "Invented Ltd" } } });
+    Assert(report.Customer["company"].Status == "ambiguous" && report.Customer["company"].Value is null);
+    report = InquiryService.Validate("Hello", new() { Customer = new() { ["company"] = new() { Status = "known", Value = "Invented Ltd", Evidence = "Hello" } } });
+    Assert(report.Customer["company"].Status != "known");
+});
+Add("客户数量可从原文千分位直接核验", () =>
+{
+    const string source = "Brush A 5,000 pcs";
+    var report = InquiryService.Validate(source, new() { Products = [new() { SourceEvidence = source, Fields = new() { ["quantity"] = new() { Status = "known", Value = "5000", Evidence = "5,000 pcs" } } }] });
+    Assert(report.Products[0].Fields["quantity"].Status == "known");
+});
+Add("多产品数量证据不能引用另一产品，重叠范围也不能确认", () =>
+{
+    const string source = "Brush A 500 pcs. Brush B 800 pcs.";
+    var a = new InquiryProduct { SourceEvidence = "Brush A 500 pcs.", Fields = new() { ["quantity"] = new() { Status = "known", Value = "800", Evidence = "800 pcs" } } };
+    var b = new InquiryProduct { SourceEvidence = "Brush B 800 pcs.", Fields = new() { ["quantity"] = new() { Status = "known", Value = "800", Evidence = "800 pcs" } } };
+    var report = InquiryService.Validate(source, new() { Products = [a, b] });
+    Assert(report.Products[0].Fields["quantity"].Status == "ambiguous");
+    Assert(report.Products[1].Fields["quantity"].Status == "known");
+    report = InquiryService.Validate(source, new() { Products = [a with { SourceEvidence = source }, b] });
+    Assert(report.Products.All(p => p.Fields["quantity"].Status != "known"));
+});
+Add("含运费报价才把目的地列为关键缺项", () =>
+{
+    var freight = InquiryService.Validate("Please quote 5,000 pcs, including freight.", new());
+    var excluded = InquiryService.Validate("Please quote product price only, freight excluded.", new());
+    Assert(freight.Customer["destination"].Priority == "critical");
+    Assert(excluded.Customer["destination"].Priority == "optional");
+});
+Add("明确无 Logo 和包装不生成相关追问", () =>
+{
+    const string source = "Brush 500 pcs. No logo and no retail packaging.";
+    var report = InquiryService.Validate(source, new() { Products = [new() { SourceEvidence = source }] });
+    var fields = report.Products[0].Fields;
+    Assert(fields["logo"].Status == "not_applicable" && fields["logo_artwork"].Status == "not_applicable");
+    Assert(fields["packaging_design"].Status == "not_applicable");
+    Assert(!report.Questions.Any(q => q.Contains("logo") || q.Contains("packaging")));
+});
+Add("需要和不需要 Logo 同时出现不能被归为不适用", () =>
+{
+    const string source = "Need logo on back. No logo.";
+    var report = InquiryService.Validate(source, new() { Products = [new() { SourceEvidence = source }] });
+    Assert(report.Products[0].Fields["logo"].Status == "conflicting");
+});
+Add("模糊圣诞日期不补年份或改为出货日", () =>
+{
+    var report = InquiryService.Validate("Need them before Christmas.", new() { Customer = new() { ["target_time"] = new() { Status = "known", Value = "2026-12-25", Evidence = "before Christmas" } } });
+    var time = report.Customer["target_time"];
+    Assert(time.Status == "ambiguous" && time.Value == "before Christmas" && !time.Value.Contains("2026"));
+});
+Add("不适用必须有明确证据，未知状态和损坏结构拒绝", () =>
+{
+    var report = InquiryService.Validate("Logo on back", new() { Customer = new() { ["company"] = new() { Status = "not_applicable", Evidence = "Logo on back" } } });
+    Assert(report.Customer["company"].Status == "ambiguous");
+    Throws<InvalidDataException>(() => InquiryService.Validate("Hello", new() { Customer = new() { ["name"] = new() { Status = "invented" } } }));
+    Throws<InvalidDataException>(() => InquiryService.Parse("{\"customer\":true}"));
+});
+Add("整理导出固定四区，JSON 保留原文和字段证据", () =>
+{
+    var report = InquiryService.Validate("Please quote brushes.", new());
+    var markdown = InquiryService.Markdown(report);
+    foreach (var heading in new[] { "客户信息", "分产品需求", "缺项 / 歧义 / 冲突", "建议追问" }) Assert(markdown.Contains(heading));
+    var json = JsonSerializer.Serialize(report, JsonFormat.Options);
+    Assert(json.Contains("source_text") && json.Contains("evidence"));
+});
+Add("普通设置导出移除密钥和密文，Provider 参数有效", () =>
+{
+    var provider = new ProviderProfile { EncryptedApiKey = "encrypted-test-only", Temperature = .3, MaxOutputTokens = 4096 };
+    var safe = JsonSerializer.Serialize(provider with { EncryptedApiKey = null }, JsonFormat.Options);
+    Assert(!safe.Contains("encrypted_api_key") && !safe.Contains("encrypted-test-only"));
+    provider.Validate(requireConfigured: false);
+    Throws<InvalidDataException>(() => (provider with { Temperature = double.NaN }).Validate(false));
+    Throws<InvalidDataException>(() => (provider with { MaxOutputTokens = 1 }).Validate(false));
+});
+
+Add("普通包装不无条件追问设计，运费矛盾保持冲突", () =>
+{
+    const string source = "Brush 500 pcs in standard packaging.";
+    var report = InquiryService.Validate(source, new() { Products = [new() { SourceEvidence = source, Fields = new() { ["packaging"] = new() { Status = "known", Value = "standard packaging", Evidence = "standard packaging" } } }] });
+    Assert(!report.Questions.Any(q => q.Contains("packaging_design")));
+    report = InquiryService.Validate("Freight included. Freight excluded.", new());
+    Assert(report.Issues.Any(i => i.Path == "shipping_quote" && i.Status == "conflicting"));
+});
+
 var failures = 0;
 try
 {

@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using Hardcodet.Wpf.TaskbarNotification;
+using VantreLingo.Core;
 using VantreLingo.Core.Configuration;
 using VantreLingo.Desktop.Infrastructure;
 using VantreLingo.Desktop.Views;
@@ -21,6 +22,10 @@ public partial class App : Application
     private bool _exiting;
     internal bool IsExiting => _exiting;
     internal AppSettings Settings { get; private set; } = new();
+    internal PresetCatalog Presets { get; private set; } = new();
+    internal GlossaryCatalog Glossary { get; private set; } = new();
+    private JsonFileStore<PresetCatalog> _presetStore = null!;
+    private JsonFileStore<GlossaryCatalog> _glossaryStore = null!;
     internal ProviderSettings Providers { get; private set; } = new();
     internal JsonFileStore<AppSettings> SettingsStore { get; private set; } = null!;
     private JsonFileStore<ProviderSettings> _providerStore = null!;
@@ -40,6 +45,10 @@ public partial class App : Application
             var dataPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VantreLingo");
             SettingsStore = new(Path.Combine(dataPath, "settings.json"), () => new(), s => s.Validate());
             _providerStore = new(Path.Combine(dataPath, "providers.json"), () => new(), p => p.Validate());
+            _presetStore = new(Path.Combine(dataPath, "presets.json"), () => new(), p => p.Validate());
+            _glossaryStore = new(Path.Combine(dataPath, "glossary.json"), () => new(), g => g.Validate());
+            Presets = _presetStore.Load();
+            Glossary = _glossaryStore.Load();
             Settings = SettingsStore.Load();
             Providers = _providerStore.Load();
             // 禁止凭据请求经重定向转发，也没有 Provider 自动切换、启动探测或轮询。
@@ -54,7 +63,8 @@ public partial class App : Application
             };
             _tray.TrayMouseDoubleClick += (_, _) => ShowTool();
             _hotkeys = new HotkeyMapper(() => _ = _tool.CaptureAndTranslateAsync(readOnly: true),
-                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false));
+                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false),
+                () => _ = _tool.CaptureOcrAsync());
             _instance.Listen(() => Dispatcher.BeginInvoke(ShowTool));
             ShowTool();
             if (!_hotkeys.TryApply(Settings.Hotkeys, out var error))
@@ -72,6 +82,9 @@ public partial class App : Application
     {
         var menu = new ContextMenu();
         Add("输入翻译", ShowTool);
+        Add("截图取字", () => { if (_tool is not null) _ = _tool.CaptureOcrAsync(); });
+        Add("客户整理", () => { ShowTool(); _tool?.PrepareInquiry(); });
+        Add("风格与术语", ShowLibrary);
         Add("设置", ShowSettings);
         menu.Items.Add(new Separator());
         Add("退出", ExitApplication);
@@ -105,6 +118,32 @@ public partial class App : Application
         }
         _settingsWindow.Show();
         _settingsWindow.Activate();
+    }
+
+    internal void ShowLibrary()
+    {
+        ShowSettings(); _settingsWindow?.ShowLibraryTab();
+    }
+    internal void SavePresets(PresetCatalog presets, bool invalidate = true)
+    {
+        _presetStore.Save(presets); Presets = presets;
+        if (invalidate) _tool?.ConfigurationChanged();
+        _tool?.RefreshStyles();
+    }
+    internal void SaveGlossary(GlossaryCatalog glossary)
+    {
+        _glossaryStore.Save(glossary); Glossary = glossary; _tool?.ConfigurationChanged();
+    }
+    internal void MarkPresetTested(StylePreset tested)
+    {
+        var current = Presets.Presets.FirstOrDefault(p => p.Id == tested.Id);
+        if (current is null || current.Fingerprint() != tested.Fingerprint()) return;
+        SavePresets(Presets with { Presets = Presets.Presets.Select(p => p.Id == tested.Id ? p.Tested() : p).ToList() }, invalidate: false);
+    }
+    internal void SelectStyle(string id)
+    {
+        var settings = Settings with { Writing = Settings.Writing with { DefaultPreset = id } };
+        SettingsStore.Save(settings); Settings = settings;
     }
 
     internal bool SaveConfiguration(AppSettings settings, ProviderSettings providers, out string error)

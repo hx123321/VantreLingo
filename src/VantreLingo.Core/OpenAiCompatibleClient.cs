@@ -12,22 +12,33 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
         provider.Validate();
         if (string.IsNullOrWhiteSpace(request.Text) || request.Text.Length > 30_000)
             throw new InvalidDataException("请输入文本，单次上限为 30,000 字符。");
+        var content = await CompleteJsonAsync(TranslationContract.ComposePrompt(request), request.Text, cancellationToken);
+        return TranslationContract.Parse(content, request.Languages);
+    }
+
+    public async Task<string> CompleteJsonAsync(string systemPrompt, string text, CancellationToken cancellationToken)
+    {
+        provider.Validate();
+        if (string.IsNullOrWhiteSpace(text) || text.Length > 30_000)
+            throw new InvalidDataException("请输入文本，单次上限为 30,000 字符。");
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(provider.TimeoutSeconds));
         using var message = new HttpRequestMessage(HttpMethod.Post, provider.ChatCompletionsUri());
         if (!string.IsNullOrWhiteSpace(apiKey))
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-        message.Content = JsonContent.Create(new
+        var payload = new Dictionary<string, object>
         {
-            model = provider.Model,
-            stream = false,
-            messages = new[]
+            ["model"] = provider.Model, ["stream"] = false,
+            ["messages"] = new[]
             {
-                new { role = "system", content = TranslationContract.SystemPrompt(request.Languages) },
-                new { role = "user", content = JsonSerializer.Serialize(new { source_text = request.Text }) }
+                new { role = "system", content = systemPrompt },
+                new { role = "user", content = JsonSerializer.Serialize(new { source_text = text }) }
             },
-            response_format = new { type = "json_object" }
-        });
+            ["response_format"] = new { type = "json_object" }
+        };
+        if (provider.Temperature is { } temperature) payload["temperature"] = temperature;
+        if (provider.MaxOutputTokens is { } maxTokens) payload["max_tokens"] = maxTokens;
+        message.Content = JsonContent.Create(payload);
 
         try
         {
@@ -53,7 +64,8 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
             var content = choice
                 .GetProperty("message").GetProperty("content").GetString();
             if (content is null) throw new InvalidDataException("Provider 返回空内容。");
-            return TranslationContract.Parse(content, request.Languages);
+            cancellationToken.ThrowIfCancellationRequested();
+            return content;
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {

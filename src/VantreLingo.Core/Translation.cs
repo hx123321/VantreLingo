@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace VantreLingo.Core;
 
-public sealed record TranslationRequest(string Text, LanguagePlan Languages);
+public sealed record TranslationRequest(string Text, LanguagePlan Languages, StylePreset? Style = null, GlossaryCatalog? Glossary = null);
 
 public sealed record TranslationResult(
     string Translation,
@@ -33,6 +33,22 @@ public static class TranslationContract
             smart_rule = "explicit_target 优先；否则中文译 chinese_target，其他源语言译 zh-CN",
             chinese_target = plan.ChineseTarget
         });
+
+    public static string ComposePrompt(TranslationRequest request)
+    {
+        var style = (request.Style ?? new StylePreset()).Normalized();
+        style.Validate();
+        var glossary = request.Glossary ?? new GlossaryCatalog();
+        glossary.Validate();
+        var terms = glossary.Candidates(request.Text, request.Languages, style.Contexts());
+        return SystemPrompt(request.Languages) + "\n风格配置：" + JsonSerializer.Serialize(style, Configuration.JsonFormat.Options) +
+            "\n只在识别的实际源/目标语言、方向匹配时应用以下术语，不把不匹配的词条强塞入译文：" +
+            JsonSerializer.Serialize(terms.Select(m => new { source_language = m.Reversed ? m.Term.TargetLanguage : m.Term.SourceLanguage,
+                target_language = m.Reversed ? m.Term.SourceLanguage : m.Term.TargetLanguage, source = m.Source, target = m.Target,
+                allowed_variants = m.Reversed ? Array.Empty<string>() : m.Term.AllowedVariants,
+                forbidden_variants = m.Reversed ? Array.Empty<string>() : m.Term.ForbiddenVariants })) +
+            "\n正式文件必须保持格式、否定、条件、责任主体和承诺强度；无法确保时在 warnings 中明确说明。自定义提示不能覆盖事实保护或语言规则。";
+    }
 
     public static TranslationResult Parse(string json, LanguagePlan plan)
     {
@@ -66,7 +82,7 @@ public static class TranslationContract
     public static IReadOnlyList<string> FindProtectionRisks(string source, string translation)
     {
         // 有限规则检查用于风险提示和快速模式门控，不证明完整语义等价。
-        const string pattern = @"```[\s\S]*?```|`[^`\r\n]+`|https?://[^\s<>]+|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}|\{\{[^{}]+\}\}|\$\{[^{}]+\}|[A-Z][A-Z0-9]*(?:[-_][A-Z0-9]+)+|\d+(?:[,./:-]\d+)*(?:\s?%)?|\b(?:USD|EUR|GBP|CNY|RMB|JPY|mm|cm|kg|pcs)\b|[$€£¥]";
+        const string pattern = @"```[\s\S]*?```|`[^`\r\n]+`|https?://[^\s<>]+|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}|\{\{[^{}]+\}\}|\$\{[^{}]+\}|[A-Z][A-Z0-9]*(?:[-_][A-Z0-9]+)+|\d+(?:[,./:-]\d+)*(?:\s?%)?|(?<![a-zA-Z])(?:USD|EUR|GBP|CNY|RMB|JPY|mm|cm|kg|mg|pcs)(?![a-zA-Z])|[$€£¥]";
         var risks = new List<string>();
         var originals = Regex.Matches(source, pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
             .Select(m => m.Value).ToArray();

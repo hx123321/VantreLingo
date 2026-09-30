@@ -10,10 +10,11 @@ public sealed record AppSettings
     public WritingSettings Writing { get; init; } = new();
     public HotkeySettings Hotkeys { get; init; } = new();
     public PrivacySettings Privacy { get; init; } = new();
+    public OcrSettings Ocr { get; init; } = new();
 
     public void Validate()
     {
-        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Privacy is null)
+        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Privacy is null || Ocr is null)
             throw new InvalidDataException("设置版本或结构不受支持，请保留原文件后手动修复。");
         if (Language.Mode is not ("smart" or "fixed"))
             throw new InvalidDataException("不支持的语言模式。");
@@ -26,6 +27,7 @@ public sealed record AppSettings
             throw new InvalidDataException("固定模式必须设置目标语言。");
         if (Writing.Mode is not ("review" or "fast"))
             throw new InvalidDataException("写作模式必须为 review 或 fast。");
+        if (Ocr.Language is not null) LanguageRoutingService.ValidateCode(Ocr.Language);
         if (Privacy.SaveTranslationHistory || Privacy.SaveCustomerContent || Privacy.Telemetry || Privacy.AutoUpdate)
             throw new InvalidDataException("当前版本不支持历史、遥测或自动更新。");
     }
@@ -50,6 +52,11 @@ public sealed record HotkeySettings
     public string ReadTranslate { get; init; } = "Alt+D";
     public string WriteTranslate { get; init; } = "Ctrl+Alt+G";
     public string ScreenshotOcr { get; init; } = "Alt+S";
+}
+
+public sealed record OcrSettings
+{
+    public string? Language { get; init; }
 }
 
 public sealed record PrivacySettings
@@ -88,13 +95,18 @@ public sealed record ProviderProfile
     public string Endpoint { get; init; } = "https://api.openai.com/v1/";
     public string Model { get; init; } = "";
     public int TimeoutSeconds { get; init; } = 60;
+    public double? Temperature { get; init; }
+    public int? MaxOutputTokens { get; init; }
 
     // 密钥是 DPAPI CurrentUser 加密后的 Base64，普通设置导出必须排除此字段。
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? EncryptedApiKey { get; init; }
 
     public void Validate(bool requireConfigured = true)
     {
         _ = ChatCompletionsUri();
+        if (string.IsNullOrWhiteSpace(Name) || Name.Length > 100 || Temperature is { } t && (!double.IsFinite(t) || t < 0 || t > 2) ||
+            MaxOutputTokens is { } max && (max < 256 || max > 65_536)) throw new InvalidDataException("Provider 名称、温度或输出上限无效。");
         if (TimeoutSeconds is < 5 or > 300)
             throw new InvalidDataException("超时须在 5–300 秒之间。");
         if (requireConfigured && string.IsNullOrWhiteSpace(Model))
