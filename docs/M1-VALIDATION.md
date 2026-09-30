@@ -23,7 +23,9 @@
 
 保护检查覆盖数字、单位、型号、代码、URL/邮箱/模板以及有限的新增承诺、否定和条件迹象；Diff 检查覆盖空字符串和 UTF-16 emoji。规则可能保守地阻止正确译文，不能证明语义等价，也不覆盖完整正式文件的责任主体/承诺强度要求；M2 已加入有限责任主体、义务强度和格式规则，仍不证明语义等价。
 
-验证环境为 Debian 13 x64、.NET SDK 10.0.401，Windows x64 发布为交叉编译。HTTP 使用内存模拟响应，没有真实 Provider 凭据。自动检查验证 Core 决策，不验证 Windows API 的实际行为。
+本地环境为 Debian 13 x64、.NET SDK 10.0.401，Windows x64 发布为交叉编译。HTTP 使用内存模拟响应，没有真实 Provider 凭据。
+
+[Windows Server 2025 CI](https://github.com/hx123321/VantreLingo/actions/runs/36786636723) 已通过 10 项实际 Windows 互操作检查：隔离跨进程 Edit 选区与上下文读取、快速替换及剪贴板保护、追加、切换焦点拒绝、相同文本不同范围拒绝、上下文变化拒绝、阅读/风险拒绝、容量拒绝、DPAPI 加解密及篡改拒绝、无包身份 OCR 明确失败。实际发布的 WPF 主窗口启动及 MSIX 生成也通过。该记录补充 Windows API 证据，不代表下面的 Windows 11 用户环境、真实 Provider 或常见应用矩阵已通过。
 
 ## Windows 实机验证待办
 
@@ -48,4 +50,4 @@
 | Word / Office | 明确选区读取成功时审查/复制 | 待测，不认定 C 已通过 |
 | RichEdit、其他自定义控件 | 不尝试自动写回；读取失败则手动输入 | 待测 |
 
-完整 M1 尚缺真实 Windows 运行、写回及控件兼容证据。M2 风格/术语、M3 客户整理/OCR 的实现和剩余验收见 `V0.1-VALIDATION.md`，不关闭 Issue #1。
+完整 M1 尚缺 Windows 11、真实 Provider 和常见应用兼容证据。M2 风格/术语、M3 客户整理/OCR 的实现和剩余验收见 `V0.1-VALIDATION.md`，不关闭 Issue #1。

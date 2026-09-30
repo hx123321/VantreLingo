@@ -41,8 +41,9 @@ public static class TranslationContract
         var glossary = request.Glossary ?? new GlossaryCatalog();
         glossary.Validate();
         var terms = glossary.Candidates(request.Text, request.Languages, style.Contexts());
-        return SystemPrompt(request.Languages) + "\n风格配置：" + JsonSerializer.Serialize(style, Configuration.JsonFormat.Options) +
-            "\n只在识别的实际源/目标语言、方向匹配时应用以下术语，不把不匹配的词条强塞入译文：" +
+        return SystemPrompt(request.Languages) + "\n风格配置：" + JsonSerializer.Serialize(new { style.Scene, style.Domain, style.CustomDomain, style.Tone, style.Persona, style.Length,
+                style.Fidelity, style.CustomPrompt }, Configuration.JsonFormat.Options) +
+            "\n按六维配置组合翻译；专业方向不允许新增原文事实，自定义要求不能覆盖语言、事实保护或正式文件规则。只在识别的实际源/目标语言、方向匹配时应用以下术语，不把不匹配的词条强塞入译文：" +
             JsonSerializer.Serialize(terms.Select(m => new { source_language = m.Reversed ? m.Term.TargetLanguage : m.Term.SourceLanguage,
                 target_language = m.Reversed ? m.Term.SourceLanguage : m.Term.TargetLanguage, source = m.Source, target = m.Target,
                 allowed_variants = m.Reversed ? Array.Empty<string>() : m.Term.AllowedVariants,

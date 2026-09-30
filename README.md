@@ -63,7 +63,7 @@ artifacts/win-x64/             可运行结果；不提交 Git
 
 ## 本次验证边界
 
-2026-10-01 在 Debian 13 x64、.NET SDK 10.0.401 / Runtime 10.0.12 上执行锁定恢复、Release 交叉编译及 62 项 Core 检查。发布目标为 Windows x64，未在 Linux 执行 WPF。托盘、全局热键、真实 UI Automation 控件兼容性、原生写回和 DPAPI 仍需 Windows 11 实机验证；没有将其记录为验收通过。Windows CI 会构建、执行隔离原生控件/DPAPI 检查并验证未签名 MSIX；它不代替 Windows 11 用户环境的完整验收。实现和 P0 证据映射见 [交付验证记录](docs/V0.1-VALIDATION.md)。
+2026-10-01 在 Debian 13 x64、.NET SDK 10.0.401 / Runtime 10.0.12 上通过锁定恢复、Release 交叉编译、62 项 Core 检查和 Windows x64 发布。[Windows Server 2025 CI](https://github.com/hx123321/VantreLingo/actions/runs/36786636723) 另已通过 62 项 Core、10 项隔离跨进程控件/DPAPI/OCR 前置检查、实际 WPF 窗口启动及未签名 MSIX 生成，并提供 Windows 下载产物。CI 不代替 Windows 11 常见应用矩阵、真实 Provider、已签名包和断网 OCR 的完整验收。实现和 P0 证据映射见 [交付验证记录](docs/V0.1-VALIDATION.md)。
 
 ## v0.1 只做四件事
 

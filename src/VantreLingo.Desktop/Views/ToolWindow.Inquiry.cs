@@ -48,11 +48,11 @@ public partial class ToolWindow
             {
                 _inquiry = report; _customerRows = Rows(report.Customer);
                 foreach (var product in report.Products) _productRows[product.Id] = Rows(product.Fields);
-                CustomerStatusColumn.ItemsSource = ProductStatusColumn.ItemsSource = FieldStatuses;
+                CustomerStatusColumn.ItemsSource = ProductStatusColumn.ItemsSource = InquiryService.StatusLabels;
                 CustomerGrid.ItemsSource = _customerRows;
                 ProductList.ItemsSource = report.Products; ProductList.SelectedIndex = 0;
                 InquirySource.Text = source;
-                InquiryIssues.Text = string.Join("\n\n", report.Issues.Select(i => $"{i.Path} · {i.Status} · {i.Priority}\n{i.Reason}"));
+                InquiryIssues.Text = string.Join("\n\n", report.Issues.Select(i => $"{InquiryService.Label(i.Path)} · {InquiryService.StatusLabels[i.Status]} · {InquiryService.PriorityLabel(i.Priority)}\n{i.Reason}"));
                 InquiryQuestions.Text = string.Join("\n\n", report.Questions);
                 TranslationPanel.Visibility = Visibility.Collapsed; InquiryPanel.Visibility = Visibility.Visible;
                 InquiryMarkdownButton.IsEnabled = InquiryJsonButton.IsEnabled = SaveInquiryButton.IsEnabled = true;
@@ -83,7 +83,8 @@ public partial class ToolWindow
             .Concat(products.SelectMany(p => p.Fields.Select(kv => (Path: p.Id + "." + kv.Key, Field: kv.Value))))
             .Where(x => x.Field.Status is "ambiguous" or "conflicting" || (x.Field.Status == "missing" && x.Field.Priority != "optional"))
             .Select(x => new InquiryIssue(x.Path, x.Field.Status, x.Field.Priority, x.Field.Reason)).ToList();
-        return _inquiry with { Customer = customer, Products = products, Issues = issues, Questions = issues.Select(i => $"请确认 {i.Path}：{i.Reason}").ToList() };
+        issues.AddRange(_inquiry.Issues.Where(i => i.Path is "shipping_quote" or "products"));
+        return _inquiry with { Customer = customer, Products = products, Issues = issues, Questions = issues.Select(i => $"请确认 {InquiryService.Label(i.Path)}：{i.Reason}").ToList() };
     }
     private void InquiryMarkdown_Click(object sender, RoutedEventArgs e) => ExportInquiry(copy: true, json: false);
     private void InquiryJson_Click(object sender, RoutedEventArgs e) => ExportInquiry(copy: true, json: true);
@@ -116,6 +117,7 @@ public partial class ToolWindow
     private sealed class FieldRow(string name, InquiryField original)
     {
         public string Name { get; } = name;
+        public string DisplayName => InquiryService.Label(Name);
         public string Status { get; set; } = original.Status;
         public string? Value { get; set; } = original.Value;
         public string? Evidence => original.Evidence;

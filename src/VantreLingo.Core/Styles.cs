@@ -36,7 +36,9 @@ public sealed record StylePreset
     {
         if (string.IsNullOrWhiteSpace(Id) || Id.Length > 100 || string.IsNullOrWhiteSpace(Name) || Name.Length > 100 ||
             (CustomPrompt?.Length ?? 0) > 10_000) throw new InvalidDataException("风格名称、标识或自定义提示词无效。");
-        if (Domain == "custom" && (string.IsNullOrWhiteSpace(CustomDomain) || CustomDomain.Length > 100))
+        if ((CustomDomain?.Length ?? 0) > 100 || (Domain != "custom" && !string.IsNullOrWhiteSpace(CustomDomain)))
+            throw new InvalidDataException("自定义专业方向只适用于 custom，最多 100 字符。");
+        if (Domain == "custom" && string.IsNullOrWhiteSpace(CustomDomain))
             throw new InvalidDataException("自定义专业方向需要填写名称，最多 100 字符。");
         Check(Scene, StyleChoices.Scenes); Check(Domain, StyleChoices.Domains);
         Check(Tone, StyleChoices.Tones); Check(Persona, StyleChoices.Personas);

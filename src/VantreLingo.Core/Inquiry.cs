@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using VantreLingo.Core.Configuration;
 
@@ -16,6 +17,8 @@ public sealed record InquiryField
 public sealed record InquiryProduct
 {
     public string Id { get; init; } = "";
+    [JsonIgnore] public string DisplayName => Id == "unassigned" ? "未指定产品的要求" : "产品 " + Id.Replace("product-", "") +
+        (Fields.GetValueOrDefault("product_type")?.Value is { } value ? " · " + value : " · 类型待确认");
     public string SourceEvidence { get; init; } = "";
     public int SourceStart { get; init; } = -1;
     public Dictionary<string, InquiryField> Fields { get; init; } = [];
@@ -31,6 +34,26 @@ public sealed record InquiryReport(string SourceText, Dictionary<string, Inquiry
 
 public static class InquiryService
 {
+    public static IReadOnlyDictionary<string, string> StatusLabels { get; } = new Dictionary<string, string>
+    { ["known"] = "已知", ["missing"] = "缺失", ["ambiguous"] = "待确认", ["conflicting"] = "冲突", ["not_applicable"] = "不适用" };
+    public static IReadOnlyDictionary<string, string> FieldLabels { get; } = new Dictionary<string, string>
+    {
+        ["name"] = "姓名", ["company"] = "公司", ["country"] = "国家 / 地区", ["email"] = "邮箱", ["phone"] = "电话",
+        ["channel"] = "渠道", ["role"] = "角色", ["destination"] = "目的地", ["target_time"] = "目标时间",
+        ["product_type"] = "产品类型", ["reference"] = "参考 SKU / 图片 / 型号", ["quantity"] = "数量", ["material"] = "主体材质",
+        ["dimensions"] = "尺寸", ["teeth_bristles"] = "齿 / 针 / 毛", ["cushion"] = "气垫", ["logo"] = "Logo",
+        ["logo_artwork"] = "Logo 图稿", ["logo_process"] = "Logo 工艺", ["surface"] = "表面工艺", ["packaging"] = "包装",
+        ["packaging_design"] = "包装设计", ["customization"] = "定制要求", ["notes"] = "备注"
+    };
+    public static string Label(string path)
+    {
+        if (path == "shipping_quote") return "运费报价范围";
+        if (path == "products") return "产品需求";
+        var parts = path.Split('.', 2);
+        var fieldName = parts[^1]; var field = FieldLabels.GetValueOrDefault(fieldName, fieldName);
+        return parts.Length == 1 ? field : (parts[0] == "customer" ? "客户" : parts[0] == "unassigned" ? "未指定产品" : "产品 " + parts[0].Replace("product-", "")) + " · " + field;
+    }
+    public static string PriorityLabel(string value) => value switch { "critical" => "关键", "important" => "重要", "conditional" => "条件缺项", _ => "可选补充" };
     public static readonly string[] CustomerFields = ["name", "company", "country", "email", "phone", "channel", "role", "destination", "target_time"];
     public static readonly string[] ProductFields = ["product_type", "reference", "quantity", "material", "dimensions", "teeth_bristles", "cushion", "logo", "logo_artwork", "logo_process", "surface", "packaging", "packaging_design", "customization", "target_time", "destination", "notes"];
     public const string SystemPrompt = """
@@ -60,6 +83,9 @@ public static class InquiryService
         if (string.IsNullOrWhiteSpace(source) || source.Length > 30_000 || candidate.Customer is null || candidate.Products is null ||
             candidate.Products.Count > 50 || candidate.Customer.Count > 50 || candidate.Products.Any(p => p is null || p.Fields is null || p.Fields.Count > 50 || p.SourceEvidence is null || p.SourceEvidence.Length > 30_000))
             throw new InvalidDataException("客户整理输入或结构无效。");
+        var unassignedRequirements = candidate.Products.Count == 0 && IsMatch(source, @"\b(?:no logo|no (?:retail )?packaging)\b|不要\s*(?:Logo|包装)|无需\s*(?:Logo|包装)");
+        if (unassignedRequirements)
+            candidate = candidate with { Products = [new() { Id = "unassigned", SourceEvidence = source, SourceStart = 0 }] };
         var customer = NormalizeFields(source, candidate.Customer, CustomerFields);
         var products = new List<InquiryProduct>();
         var located = candidate.Products.Select(p => (Start: Locate(source, p.SourceEvidence, p.SourceStart), Length: p.SourceEvidence?.Length ?? 0)).ToArray();
@@ -81,7 +107,7 @@ public static class InquiryService
             Require(fields, "quantity", "critical", "报价需要确认数量。" );
             if (fields["logo"].Status == "known") Require(fields, "logo_artwork", "important", "需要 Logo 时，请确认图稿及工艺要求。" );
             if (fields["packaging"].Status == "known" && IsMatch(scope, @"custom|print|brand|design|定制|印刷|设计|設計")) Require(fields, "packaging_design", "conditional", "定制包装需要确认设计；普通包装可人工标为不适用。" );
-            products.Add(product with { Id = $"product-{products.Count + 1}", SourceStart = valid ? start : -1, Fields = fields });
+            products.Add(product with { Id = unassignedRequirements ? "unassigned" : $"product-{products.Count + 1}", SourceStart = valid ? start : -1, Fields = fields });
         }
         // 含运费才把目的地作为关键缺项，明确排除运费优先。
         var excluded = IsMatch(source, @"freight\s+(?:excluded|not included)|(?:exclude|excluding|without)\s+(?:the\s+)?(?:freight|shipping)|不含(?:运费|运输)|不需要(?:运费|运输)");
@@ -93,7 +119,7 @@ public static class InquiryService
             .Select(x => new InquiryIssue(x.Path, x.Field.Status, x.Field.Priority, x.Field.Reason)).ToList();
         if (requestedFreight && excluded) issues.Add(new("shipping_quote", "conflicting", "important", "原文同时要求包含和排除运费，请先确认报价范围。"));
         if (products.Count == 0) issues.Add(new("products", "missing", "critical", "未能提取独立产品，请提供产品及数量。"));
-        var questions = issues.Select(i => $"请确认 {i.Path}：{i.Reason}").ToList();
+        var questions = issues.Select(i => $"请确认 {Label(i.Path)}：{i.Reason}").ToList();
         return new(source, customer, products, issues, questions);
     }
     private static Dictionary<string, InquiryField> NormalizeFields(string source, Dictionary<string, InquiryField> candidates, string[] allowed)
@@ -111,6 +137,9 @@ public static class InquiryService
                 field = field with { Status = "ambiguous", Value = null, Evidence = null, Reason = "模型证据不能在对应原文范围中定位，已拒绝作为事实。", Priority = "important" };
             else if (field.Status == "known" && (string.IsNullOrWhiteSpace(field.Value) || !SupportedValue(field.Value, field.Evidence)))
                 field = field with { Status = "ambiguous", Value = field.Evidence, Reason = "字段值不能由引用片段直接支持，保留原文待确认。", Priority = "important" };
+            if (field.Status is "ambiguous" or "conflicting" && field.Value is not null && field.Evidence is not null && !SupportedValue(field.Value, field.Evidence))
+                field = field with { Value = field.Evidence, Reason = field.Reason + " 候选值不能直接核验，保留原文待确认。" };
+            if (field.Status == "not_applicable") field = field with { Value = null };
             if (field.Status == "not_applicable" && (field.Evidence is null || !IsMatch(field.Evidence, @"\b(?:no|not|without|none)\b|不要|无需|不适用|無需|不適用")))
                 field = field with { Status = "ambiguous", Reason = "未找到明确不适用证据，请确认。", Priority = "important" };
             if (name == "target_time" && field.Evidence is not null && IsMatch(field.Evidence, @"Christmas|圣诞|聖誕|next (?:week|month)|下周|下月|尽快|ASAP|soon"))
@@ -158,13 +187,13 @@ public static class InquiryService
         void Table(Dictionary<string, InquiryField> fields)
         {
             text.AppendLine("| 字段 | 状态 | 值 | 原文证据 | 说明 |").AppendLine("|---|---|---|---|---|");
-            foreach (var (key, field) in fields) text.AppendLine($"| {Escape(key)} | {field.Status} | {Escape(field.Value)} | {Escape(field.Evidence)} | {Escape(field.Reason)} |");
+            foreach (var (key, field) in fields) text.AppendLine($"| {Escape(Label(key))} | {StatusLabels[field.Status]} | {Escape(field.Value)} | {Escape(field.Evidence)} | {Escape(field.Reason)} |");
             text.AppendLine();
         }
         Table(report.Customer); text.AppendLine("## 分产品需求\n");
-        foreach (var product in report.Products) { text.AppendLine($"### {product.Id}\n"); Table(product.Fields); }
+        foreach (var product in report.Products) { text.AppendLine($"### {Escape(product.DisplayName)}\n"); Table(product.Fields); }
         text.AppendLine("## 缺项 / 歧义 / 冲突\n");
-        foreach (var issue in report.Issues) text.AppendLine($"- {Escape(issue.Path)} ({issue.Priority}, {issue.Status})：{Escape(issue.Reason)}");
+        foreach (var issue in report.Issues) text.AppendLine($"- {Escape(Label(issue.Path))} ({PriorityLabel(issue.Priority)}, {StatusLabels.GetValueOrDefault(issue.Status, issue.Status)})：{Escape(issue.Reason)}");
         text.AppendLine("\n## 建议追问\n");
         foreach (var question in report.Questions) text.AppendLine("- " + Escape(question));
         return text.ToString();

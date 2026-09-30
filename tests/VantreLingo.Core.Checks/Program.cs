@@ -460,6 +460,8 @@ Add("多产品数量证据不能引用另一产品，重叠范围也不能确认
     var report = InquiryService.Validate(source, new() { Products = [a, b] });
     Assert(report.Products[0].Fields["quantity"].Status == "ambiguous");
     Assert(report.Products[1].Fields["quantity"].Status == "known");
+    var duplicateIds = InquiryService.Validate(source, new() { Products = [a with { Id = "unassigned" }, b with { Id = "unassigned" }] });
+    Assert(duplicateIds.Products.Select(p => p.Id).Distinct().Count() == 2);
     report = InquiryService.Validate(source, new() { Products = [a with { SourceEvidence = source }, b] });
     Assert(report.Products.All(p => p.Fields["quantity"].Status != "known"));
 });
@@ -477,7 +479,10 @@ Add("明确无 Logo 和包装不生成相关追问", () =>
     var fields = report.Products[0].Fields;
     Assert(fields["logo"].Status == "not_applicable" && fields["logo_artwork"].Status == "not_applicable");
     Assert(fields["packaging_design"].Status == "not_applicable");
-    Assert(!report.Questions.Any(q => q.Contains("logo") || q.Contains("packaging")));
+    Assert(!report.Issues.Any(i => i.Path.Contains("logo") || i.Path.Contains("packaging")));
+    report = InquiryService.Validate("No logo and no retail packaging.", new());
+    Assert(report.Products.Single().Id == "unassigned");
+    Assert(report.Products[0].Fields["logo"].Status == "not_applicable" && report.Products[0].Fields["packaging"].Status == "not_applicable");
 });
 Add("需要和不需要 Logo 同时出现不能被归为不适用", () =>
 {
@@ -520,7 +525,7 @@ Add("普通包装不无条件追问设计，运费矛盾保持冲突", () =>
 {
     const string source = "Brush 500 pcs in standard packaging.";
     var report = InquiryService.Validate(source, new() { Products = [new() { SourceEvidence = source, Fields = new() { ["packaging"] = new() { Status = "known", Value = "standard packaging", Evidence = "standard packaging" } } }] });
-    Assert(!report.Questions.Any(q => q.Contains("packaging_design")));
+    Assert(!report.Issues.Any(i => i.Path.EndsWith(".packaging_design")));
     report = InquiryService.Validate("Freight included. Freight excluded.", new());
     Assert(report.Issues.Any(i => i.Path == "shipping_quote" && i.Status == "conflicting"));
 });
@@ -532,6 +537,7 @@ Add("自定义专业方向可用，修改后撤销快速授权", () =>
     var approved = custom.Tested().ApproveFast(); Assert(approved.CanUseFast);
     Assert(!(approved with { CustomDomain = "Legal documents" }).CanUseFast);
     Throws<InvalidDataException>(() => new StylePreset { Domain = "custom" }.Validate());
+    Throws<InvalidDataException>(() => new StylePreset { CustomDomain = "Unapproved free text" }.Validate());
 });
 
 var failures = 0;
