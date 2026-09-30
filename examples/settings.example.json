@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "language": {
+    "mode": "smart",
+    "first_chinese_target": "en",
+    "last_foreign_language": null,
+    "fixed_target": null
+  },
+  "writing": {
+    "mode": "review",
+    "default_preset": "customer-business"
+  },
+  "hotkeys": {
+    "read_translate": "Alt+D",
+    "write_translate": "Ctrl+Alt+G",
+    "screenshot_ocr": "Alt+S"
+  },
+  "privacy": {
+    "save_translation_history": false,
+    "save_customer_content": false,
+    "telemetry": false,
+    "auto_update": false
+  }
+}
