@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/STranslate/STranslate.git",
+  "tag": "v2.0.10",
+  "commit": "2a75118fe0fabc1135a619f4393eb3a8d936c5cd",
+  "license": "MIT",
+  "import_policy": "fixed-snapshot-then-prune"
+}
