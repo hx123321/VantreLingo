@@ -9,6 +9,7 @@ public sealed record StylePreset
     public string Name { get; init; } = "自定义";
     public string Scene { get; init; } = "general";
     public string Domain { get; init; } = "general";
+    public string? CustomDomain { get; init; }
     public string Tone { get; init; } = "neutral";
     public string Persona { get; init; } = "natural";
     public string Length { get; init; } = "preserve";
@@ -19,10 +20,10 @@ public sealed record StylePreset
     public string? TestedPromptHash { get; init; }
 
     public StylePreset Normalized() => Scene == "formal_document" ? this with { Fidelity = "strict" } : this;
-    public string[] Contexts() => Domain == "oem_manufacturing" ? [Scene, Domain, "oem"] : [Scene, Domain];
+    public string[] Contexts() => Domain == "oem_manufacturing" ? [Scene, Domain, "oem"] : Domain == "custom" ? [Scene, Domain, CustomDomain!] : [Scene, Domain];
     public string Fingerprint() => SelectionSnapshot.Hash(JsonSerializer.Serialize(new
-        { Scene, Domain, Tone, Persona, Length, Fidelity, CustomPrompt }));
-    public bool CanUseFast => string.IsNullOrWhiteSpace(CustomPrompt) ||
+        { Scene, Domain, CustomDomain, Tone, Persona, Length, Fidelity, CustomPrompt }));
+    public bool CanUseFast => (string.IsNullOrWhiteSpace(CustomPrompt) && Domain != "custom") ||
         (QuickModeApproved && TestedPromptHash == Fingerprint() && ApprovedPromptHash == Fingerprint());
     public StylePreset Tested() => this with { TestedPromptHash = Fingerprint() };
     public StylePreset ApproveFast()
@@ -35,6 +36,8 @@ public sealed record StylePreset
     {
         if (string.IsNullOrWhiteSpace(Id) || Id.Length > 100 || string.IsNullOrWhiteSpace(Name) || Name.Length > 100 ||
             (CustomPrompt?.Length ?? 0) > 10_000) throw new InvalidDataException("风格名称、标识或自定义提示词无效。");
+        if (Domain == "custom" && (string.IsNullOrWhiteSpace(CustomDomain) || CustomDomain.Length > 100))
+            throw new InvalidDataException("自定义专业方向需要填写名称，最多 100 字符。");
         Check(Scene, StyleChoices.Scenes); Check(Domain, StyleChoices.Domains);
         Check(Tone, StyleChoices.Tones); Check(Persona, StyleChoices.Personas);
         Check(Length, StyleChoices.Lengths); Check(Fidelity, StyleChoices.Fidelities);

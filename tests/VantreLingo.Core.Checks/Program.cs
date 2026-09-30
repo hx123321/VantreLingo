@@ -525,6 +525,15 @@ Add("普通包装不无条件追问设计，运费矛盾保持冲突", () =>
     Assert(report.Issues.Any(i => i.Path == "shipping_quote" && i.Status == "conflicting"));
 });
 
+Add("自定义专业方向可用，修改后撤销快速授权", () =>
+{
+    var custom = new StylePreset { Domain = "custom", CustomDomain = "Medical devices" };
+    custom.Validate(); Assert(!custom.CanUseFast && custom.Contexts().Contains("Medical devices"));
+    var approved = custom.Tested().ApproveFast(); Assert(approved.CanUseFast);
+    Assert(!(approved with { CustomDomain = "Legal documents" }).CanUseFast);
+    Throws<InvalidDataException>(() => new StylePreset { Domain = "custom" }.Validate());
+});
+
 var failures = 0;
 try
 {

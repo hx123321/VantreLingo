@@ -39,6 +39,7 @@ public partial class LibraryEditor : UserControl
     {
         _loading = true;
         _presetId = p.Id; PresetName.Text = p.Name; Scene.SelectedValue = p.Scene; Domain.SelectedValue = p.Domain;
+        CustomDomain.Text = p.CustomDomain ?? "";
         Tone.SelectedValue = p.Tone; Persona.SelectedValue = p.Persona; Length.SelectedValue = p.Length;
         Fidelity.SelectedValue = p.Fidelity; Fidelity.IsEnabled = p.Scene != "formal_document"; CustomPrompt.Text = p.CustomPrompt ?? "";
         _loading = false;
@@ -47,14 +48,14 @@ public partial class LibraryEditor : UserControl
     {
         var original = _app.Presets.Presets.FirstOrDefault(p => p.Id == _presetId) ?? new() { Id = _presetId };
         var p = (original with { Name = PresetName.Text.Trim(), Scene = Value(Scene), Domain = Value(Domain), Tone = Value(Tone),
-            Persona = Value(Persona), Length = Value(Length), Fidelity = Value(Fidelity), CustomPrompt = string.IsNullOrWhiteSpace(CustomPrompt.Text) ? null : CustomPrompt.Text }).Normalized();
+            Persona = Value(Persona), CustomDomain = Value(Domain) == "custom" ? CustomDomain.Text.Trim() : null, Length = Value(Length), Fidelity = Value(Fidelity), CustomPrompt = string.IsNullOrWhiteSpace(CustomPrompt.Text) ? null : CustomPrompt.Text }).Normalized();
         if (p.Fingerprint() != original.Fingerprint()) p = p with { QuickModeApproved = false, TestedPromptHash = null, ApprovedPromptHash = null };
         p.Validate(); return p;
     }
     private static string Value(ComboBox box) => box.SelectedValue as string ?? "";
     private void Scene_Changed(object sender, SelectionChangedEventArgs e)
     { if (_loading || Fidelity is null) return; Fidelity.IsEnabled = Value(Scene) != "formal_document"; if (!Fidelity.IsEnabled) Fidelity.SelectedValue = "strict"; }
-    private void NewPreset_Click(object sender, RoutedEventArgs e) => LoadPreset(new() { Id = Guid.NewGuid().ToString("N") });
+    private void NewPreset_Click(object sender, RoutedEventArgs e) { PresetList.SelectedIndex = -1; LoadPreset(new() { Id = Guid.NewGuid().ToString("N") }); }
     private void SavePreset_Click(object sender, RoutedEventArgs e) => Run(() =>
     {
         var p = ReadPreset(); SavePreset(p); StatusText.Text = "风格已保存。请在工具窗口选择并测试。";
@@ -77,7 +78,7 @@ public partial class LibraryEditor : UserControl
         TermTarget.Text = t.Target; TermContexts.Text = string.Join(", ", t.Contexts); AllowedVariants.Text = string.Join("\n", t.AllowedVariants);
         ForbiddenVariants.Text = string.Join("\n", t.ForbiddenVariants); TermNotes.Text = t.Notes;
     }
-    private void NewTerm_Click(object sender, RoutedEventArgs e) => LoadTerm(new());
+    private void NewTerm_Click(object sender, RoutedEventArgs e) { TermList.SelectedIndex = -1; LoadTerm(new()); }
     private void SaveTerm_Click(object sender, RoutedEventArgs e) => Run(() =>
     {
         var t = new GlossaryTerm { Id = _termId, Status = Value(TermStatus), SourceLanguage = TermSourceLanguage.Text.Trim(),

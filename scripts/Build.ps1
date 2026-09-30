@@ -28,7 +28,7 @@ if ($Action -eq "Verify") {
     $PublishOutput = Join-Path $TaskRoot "artifacts/win-x64"
     if (Test-Path $PublishTemp) { Remove-Item -Recurse -Force $PublishTemp }
     Invoke-TaskDotnet publish src/VantreLingo.Desktop -c Release --self-contained false `
-        -p:RestoreLockedMode=true -o $PublishTemp --nologo
+        '-p:RestoreLockedMode=true' -o $PublishTemp --nologo
     New-Item -ItemType Directory -Force -Path (Join-Path $TaskRoot "artifacts") | Out-Null
     if (Test-Path $PublishOutput) { Remove-Item -Recurse -Force $PublishOutput }
     Move-Item $PublishTemp $PublishOutput

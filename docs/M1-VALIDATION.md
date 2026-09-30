@@ -17,7 +17,7 @@
 
 ## 自动检查
 
-执行 `scripts/build.sh verify` 或 `scripts/Build.ps1 Verify`：锁定恢复、Release 构建、61 项 Core 检查。
+执行 `scripts/build.sh verify` 或 `scripts/Build.ps1 Verify`：锁定恢复、Release 构建、62 项 Core 检查。
 
 检查覆盖请求取消/迟到隔离、语言路由和记忆、HTTP 完整结果/截断/超时、设置持久化，以及写回门控：阅读拒绝、目标身份变化、原文/上下文修改、相同文字不同选区、缺少 Locator、只读、范围异常、风险、无效译文、追加文本、取消后副作用禁止。
 

@@ -9,6 +9,7 @@
     <TextBlock Text="名称" /><TextBox x:Name="PresetName" Margin="0,4,0,12" />
     <TextBlock Text="场景" /><ComboBox x:Name="Scene" Margin="0,4,0,12" SelectionChanged="Scene_Changed" />
     <TextBlock Text="专业方向" /><ComboBox x:Name="Domain" Margin="0,4,0,12" />
+    <TextBlock Text="自定义专业方向名称（专业为自定义时填写）"/><TextBox x:Name="CustomDomain" MaxLength="100" Margin="0,4,0,12"/>
     <TextBlock Text="语气" /><ComboBox x:Name="Tone" Margin="0,4,0,12" />
     <TextBlock Text="性格 / 表达方式" /><ComboBox x:Name="Persona" Margin="0,4,0,12" />
     <TextBlock Text="篇幅" /><ComboBox x:Name="Length" Margin="0,4,0,12" />
