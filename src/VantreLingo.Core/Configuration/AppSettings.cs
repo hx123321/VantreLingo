@@ -1,0 +1,127 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace VantreLingo.Core.Configuration;
+
+public sealed record AppSettings
+{
+    public int SchemaVersion { get; init; } = 1;
+    public LanguageSettings Language { get; init; } = new();
+    public WritingSettings Writing { get; init; } = new();
+    public HotkeySettings Hotkeys { get; init; } = new();
+    public PrivacySettings Privacy { get; init; } = new();
+
+    public void Validate()
+    {
+        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Privacy is null)
+            throw new InvalidDataException("设置版本或结构不受支持，请保留原文件后手动修复。");
+        if (Language.Mode is not ("smart" or "fixed"))
+            throw new InvalidDataException("不支持的语言模式。");
+        LanguageRoutingService.ValidateCode(Language.FirstChineseTarget, allowChinese: false);
+        if (Language.LastForeignLanguage is not null)
+            LanguageRoutingService.ValidateCode(Language.LastForeignLanguage, allowChinese: false);
+        if (Language.FixedTarget is not null)
+            LanguageRoutingService.ValidateCode(Language.FixedTarget);
+        if (Language.Mode == "fixed" && Language.FixedTarget is null)
+            throw new InvalidDataException("固定模式必须设置目标语言。");
+        if (Writing.Mode != "review")
+            throw new InvalidDataException("当前基座仅支持审查模式，尚未开放快速写回。");
+        if (Privacy.SaveTranslationHistory || Privacy.SaveCustomerContent || Privacy.Telemetry || Privacy.AutoUpdate)
+            throw new InvalidDataException("当前版本不支持历史、遥测或自动更新。");
+    }
+}
+
+public sealed record LanguageSettings
+{
+    public string Mode { get; init; } = "smart";
+    public string FirstChineseTarget { get; init; } = "en";
+    public string? LastForeignLanguage { get; init; }
+    public string? FixedTarget { get; init; }
+}
+
+public sealed record WritingSettings
+{
+    public string Mode { get; init; } = "review";
+    public string DefaultPreset { get; init; } = "customer-business";
+}
+
+public sealed record HotkeySettings
+{
+    public string ReadTranslate { get; init; } = "Alt+D";
+    public string WriteTranslate { get; init; } = "Ctrl+Alt+G";
+    public string ScreenshotOcr { get; init; } = "Alt+S";
+}
+
+public sealed record PrivacySettings
+{
+    public bool SaveTranslationHistory { get; init; }
+    public bool SaveCustomerContent { get; init; }
+    public bool Telemetry { get; init; }
+    public bool AutoUpdate { get; init; }
+}
+
+public sealed record ProviderSettings
+{
+    public int SchemaVersion { get; init; } = 1;
+    public string SelectedProviderId { get; init; } = "default";
+    public List<ProviderProfile> Providers { get; init; } = [new()];
+
+    [JsonIgnore]
+    public ProviderProfile Selected => Providers.Single(p => p.Id == SelectedProviderId);
+
+    public void Validate()
+    {
+        if (SchemaVersion != 1 || Providers is null || Providers.Count == 0 ||
+            Providers.Any(p => p is null || string.IsNullOrWhiteSpace(p.Id)) ||
+            Providers.Select(p => p.Id).Distinct(StringComparer.Ordinal).Count() != Providers.Count ||
+            Providers.Count(p => p.Id == SelectedProviderId) != 1)
+            throw new InvalidDataException("Provider 设置结构无效。");
+        foreach (var profile in Providers)
+            profile.Validate(requireConfigured: false);
+    }
+}
+
+public sealed record ProviderProfile
+{
+    public string Id { get; init; } = "default";
+    public string Name { get; init; } = "默认 Provider";
+    public string Endpoint { get; init; } = "https://api.openai.com/v1/";
+    public string Model { get; init; } = "";
+    public int TimeoutSeconds { get; init; } = 60;
+
+    // 密钥是 DPAPI CurrentUser 加密后的 Base64，普通设置导出必须排除此字段。
+    public string? EncryptedApiKey { get; init; }
+
+    public void Validate(bool requireConfigured = true)
+    {
+        _ = ChatCompletionsUri();
+        if (TimeoutSeconds is < 5 or > 300)
+            throw new InvalidDataException("超时须在 5–300 秒之间。");
+        if (requireConfigured && string.IsNullOrWhiteSpace(Model))
+            throw new InvalidDataException("请先在设置中填写模型名称。");
+        if (Model is null || Model.Length > 200 || Model.Any(char.IsControl))
+            throw new InvalidDataException("模型名称无效。");
+    }
+
+    public Uri ChatCompletionsUri()
+    {
+        if (!Uri.TryCreate(Endpoint, UriKind.Absolute, out var uri) ||
+            (uri.Scheme != "https" && !(uri.Scheme == "http" && uri.IsLoopback)) ||
+            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Query) ||
+            !string.IsNullOrEmpty(uri.Fragment))
+            throw new InvalidDataException("Endpoint 须为 HTTPS API 基础地址；本机服务允许 HTTP。不要在地址内填写凭据。");
+        if (uri.AbsolutePath.TrimEnd('/').EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
+            return uri;
+        return new Uri(uri.AbsoluteUri.TrimEnd('/') + "/chat/completions");
+    }
+}
+
+public static class JsonFormat
+{
+    public static JsonSerializerOptions Options { get; } = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        WriteIndented = true,
+        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
+    };
+}

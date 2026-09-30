@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/VantreLingo.Core/VantreLingo.Core.csproj" />
+  <Project Path="src/VantreLingo.Desktop/VantreLingo.Desktop.csproj" />
+  <Project Path="tests/VantreLingo.Core.Checks/VantreLingo.Core.Checks.csproj" />
+</Solution>
