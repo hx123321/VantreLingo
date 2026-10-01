@@ -136,22 +136,31 @@ public partial class ToolWindow : Window, IDisposable
             _miniFailed = false;
             SetStatus("正在读取选区…");
             EnsureMini().ShowWorking("正在读取选区…");
-            SelectionSnapshot? snapshot = null;
+            CaptureOutcome outcome;
             try
             {
-                snapshot = await _capture.CaptureAsync(operation.Id, operation.Token);
+                outcome = await _capture.CaptureAsync(operation.Id, operation.Token);
             }
             catch (OperationCanceledException) { throw; }
             catch
             {
-                snapshot = null;
+                outcome = new(null, CaptureReason.Error);
             }
+            if (outcome.Snapshot is null && outcome.Reason is not CaptureReason.Cancelled &&
+                _app.Settings.Capture.AutoCopyFallback)
+            {
+                var fallback = await TryAutoCopyFallbackAsync(operation);
+                if (fallback is not null) outcome = new(fallback, CaptureReason.Ok);
+            }
+            var snapshot = outcome.Snapshot;
+            var reason = outcome.Reason;
             if (!_operations.TryPublish(operation, () =>
             {
                 // 快捷键路径不再直接打开主窗口，统一走小悬浮窗。
                 if (snapshot is null)
                 {
-                    Report("没有取得明确选区，已进入剪贴板兼容模式：复制文本后自动翻译，或按 Alt+C 翻译剪贴板。", fast, armClipboardWatch: true);
+                    var detail = CaptureService.Describe(reason);
+                    Report($"没有取得明确选区：{detail}已进入剪贴板兼容模式：复制文本后自动翻译，或按 Alt+C 翻译剪贴板。", fast, armClipboardWatch: true);
                     return;
                 }
                 _settingInput = true;
@@ -179,6 +188,37 @@ public partial class ToolWindow : Window, IDisposable
             }
             catch { }
         }
+    }
+
+    private async Task<SelectionSnapshot?> TryAutoCopyFallbackAsync(Operation operation)
+    {
+        // 显式热键触发的一次性兼容取词：记录旧剪贴板指纹，模拟 Ctrl+C 后等新内容。
+        // 只读剪贴板、不写回、不恢复，避免覆盖用户新复制内容；全程永不抛异常。
+        try
+        {
+            string? beforeHash;
+            try { beforeHash = ClipboardReader.CurrentHash(); } catch { beforeHash = null; }
+            try { EnsureMini().ShowWorking("选区接口无结果，正在尝试兼容复制取词…"); } catch { }
+            if (!PasteHelper.SendCopy()) return null;
+            var deadline = DateTimeOffset.UtcNow.AddMilliseconds(600);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                try { await Task.Delay(60, operation.Token); }
+                catch (OperationCanceledException) { return null; }
+                catch { return null; }
+                string? text;
+                try { text = ClipboardReader.TryGetText(); } catch { return null; }
+                if (text is null) continue;
+                string hash;
+                try { hash = ClipboardText.Hash(text); } catch { continue; }
+                if (string.IsNullOrEmpty(hash) || hash == beforeHash) continue;
+                try { operation.Token.ThrowIfCancellationRequested(); } catch { return null; }
+                return new SelectionSnapshot(operation.Id, 0, 0, null, "Clipboard",
+                    text, SelectionSnapshot.Hash(text), DateTimeOffset.UtcNow, null);
+            }
+            return null;
+        }
+        catch { return null; }
     }
 
     internal async Task TranslateClipboardAsync()

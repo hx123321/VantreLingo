@@ -256,9 +256,11 @@ var selection = new SelectionState(42, 100, 200, 7, 9, controlText, true, true);
 Add("首次默认审查，快速模式可保存并恢复", () =>
 {
     Assert(new AppSettings().Writing.Mode == "review");
+    Assert(!new AppSettings().Capture.AutoCopyFallback);
     var store = new JsonFileStore<AppSettings>(Path.Combine(temporaryRoot, "writing.json"), () => new(), s => s.Validate());
-    store.Save(new() { Writing = new() { Mode = "fast" } });
-    Assert(store.Load().Writing.Mode == "fast");
+    store.Save(new() { Writing = new() { Mode = "fast" }, Capture = new() { AutoCopyFallback = true } });
+    var loaded = store.Load();
+    Assert(loaded.Writing.Mode == "fast" && loaded.Capture.AutoCopyFallback);
 });
 Add("阅读意图无论风险和目标状态都不能写回", () =>
     Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Read, "Hello", []) is not null));

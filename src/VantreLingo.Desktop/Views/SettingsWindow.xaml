@@ -40,6 +40,9 @@
         <TextBlock Text="截图取字（留空停用）"/><TextBox x:Name="OcrHotkeyText" Margin="0,4,0,12"/>
         <TextBlock Text="复制翻译：读取剪贴板并翻译（默认 Alt+C，留空停用）"/><TextBox x:Name="ClipboardHotkeyText" Margin="0,4,0,12"/>
         <TextBlock Text="粘贴译文：在小窗有译文时替换/粘贴（默认 Alt+V，留空停用）"/><TextBox x:Name="PasteHotkeyText" Margin="0,4,0,12"/>
+        <CheckBox x:Name="AutoCopyCheck" Content="选区失败时自动模拟 Ctrl+C 取词（浏览器/VS Code 兼容，默认关闭）" Margin="0,0,0,6" />
+        <TextBlock Text="自动取词只在快捷键触发后试一次，不监听剪贴板，不恢复剪贴板；剪贴板无新内容时仍提示失败，可再按 Alt+C 手动翻译。"
+                   TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12" />
         <TextBlock Text="本地 OCR 语言（系统已安装能力，与翻译语种独立）"/><ComboBox x:Name="OcrLanguage" DisplayMemberPath="Label" SelectedValuePath="Code" Margin="0,4,0,8"/><TextBlock x:Name="OcrStatus" TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12"/>
         <TextBlock Text="目标语言策略"/><ComboBox x:Name="LanguageMode" SelectedValuePath="Tag" Margin="0,4,0,8"><ComboBoxItem Content="智能：外语→中文，中文→最近外语" Tag="smart"/><ComboBoxItem Content="固定目标语言" Tag="fixed"/></ComboBox>
         <TextBlock Text="固定目标语言代码（如 ja、de、fr）"/><TextBox x:Name="FixedTargetText" Margin="0,4,0,12"/>

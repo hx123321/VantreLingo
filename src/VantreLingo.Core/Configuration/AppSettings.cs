@@ -9,12 +9,13 @@ public sealed record AppSettings
     public LanguageSettings Language { get; init; } = new();
     public WritingSettings Writing { get; init; } = new();
     public HotkeySettings Hotkeys { get; init; } = new();
+    public CaptureSettings Capture { get; init; } = new();
     public PrivacySettings Privacy { get; init; } = new();
     public OcrSettings Ocr { get; init; } = new();
 
     public void Validate()
     {
-        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Privacy is null || Ocr is null)
+        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Capture is null || Privacy is null || Ocr is null)
             throw new InvalidDataException("设置版本或结构不受支持，请保留原文件后手动修复。");
         if (Language.Mode is not ("smart" or "fixed"))
             throw new InvalidDataException("不支持的语言模式。");
@@ -45,6 +46,13 @@ public sealed record WritingSettings
 {
     public string Mode { get; init; } = "review";
     public string DefaultPreset { get; init; } = "customer-business";
+}
+
+public sealed record CaptureSettings
+{
+    // 显式兼容取词：选区读取失败后，热键触发时模拟一次 Ctrl+C 并读取剪贴板。
+    // 默认关闭；开启后仍只在明确热键时执行一次，不做后台监听，不恢复剪贴板。
+    public bool AutoCopyFallback { get; init; }
 }
 
 public sealed record HotkeySettings

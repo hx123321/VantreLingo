@@ -23,6 +23,7 @@ public partial class SettingsWindow : Window
         ReadHotkeyText.Text = app.Settings.Hotkeys.ReadTranslate; WriteHotkeyText.Text = app.Settings.Hotkeys.WriteTranslate;
         OcrHotkeyText.Text = app.Settings.Hotkeys.ScreenshotOcr;
         ClipboardHotkeyText.Text = app.Settings.Hotkeys.ClipboardTranslate; PasteHotkeyText.Text = app.Settings.Hotkeys.PasteTranslation;
+        AutoCopyCheck.IsChecked = app.Settings.Capture.AutoCopyFallback;
         WritingMode.SelectedValue = app.Settings.Writing.Mode;
         LanguageMode.SelectedValue = app.Settings.Language.Mode; FixedTargetText.Text = app.Settings.Language.FixedTarget ?? "";
         var languages = new List<OcrChoice> { new(null, "自动：系统首选 OCR 语言") };
@@ -111,6 +112,7 @@ public partial class SettingsWindow : Window
             Writing = _app.Settings.Writing with { Mode = WritingMode.SelectedValue as string ?? "review" },
             Hotkeys = new() { ReadTranslate = ReadHotkeyText.Text.Trim(), WriteTranslate = WriteHotkeyText.Text.Trim(), ScreenshotOcr = OcrHotkeyText.Text.Trim(),
                 ClipboardTranslate = ClipboardHotkeyText.Text.Trim(), PasteTranslation = PasteHotkeyText.Text.Trim() },
+            Capture = new() { AutoCopyFallback = AutoCopyCheck.IsChecked == true },
             Ocr = new() { Language = (OcrLanguage.SelectedItem as OcrChoice)?.Code },
             Language = _app.Settings.Language with { Mode = LanguageMode.SelectedValue as string ?? "smart",
                 FixedTarget = string.IsNullOrWhiteSpace(FixedTargetText.Text) ? null : FixedTargetText.Text.Trim(),
