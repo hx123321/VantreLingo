@@ -405,9 +405,21 @@ public partial class ToolWindow : Window, IDisposable
             style.Validate();
             if (fast && !style.CanUseFast) throw new InvalidDataException("当前自定义提示未获快速授权，请先成功测试并明确授权。");
             var glossary = _app.Glossary;
-            var provider = _app.Providers.Selected;
-            var client = new OpenAiCompatibleClient(_http, provider, DpapiSecretStore.Decrypt(provider.EncryptedApiKey));
-            var result = await client.TranslateAsync(new TranslationRequest(text, languages, style, glossary), operation.Token);
+            var direct = DirectTranslation.TryTranslate(text, languages, glossary);
+            TranslationResult result;
+            bool isDirect;
+            if (direct is not null)
+            {
+                result = direct;
+                isDirect = true;
+            }
+            else
+            {
+                var provider = _app.Providers.Selected;
+                var client = new OpenAiCompatibleClient(_http, provider, DpapiSecretStore.Decrypt(provider.EncryptedApiKey));
+                result = await client.TranslateAsync(new TranslationRequest(text, languages, style, glossary), operation.Token);
+                isDirect = false;
+            }
             _operations.TryPublish(operation, () =>
             {
                 _languages = languages;
@@ -421,6 +433,7 @@ public partial class ToolWindow : Window, IDisposable
                 UpdateRisksAndDiff();
                 UpdateActions();
                 SetResultStatus();
+                if (isDirect) SetStatus(StatusText.Text + "\n本地术语直译，未调用模型。");
                 if (fast)
                 {
                     // 快速模式：只有目标为中文才尝试一次自动写回；非中文直接弹小窗，
@@ -428,7 +441,7 @@ public partial class ToolWindow : Window, IDisposable
                     if (!LanguageRoutingService.IsChinese(result.TargetLanguage))
                     {
                         IntentLabel.Text = "快速模式 · 非中文已保留原文";
-                        if (_warnings.Length == 0)
+                        if (!isDirect && _warnings.Length == 0)
                         {
                             try { _app.MarkPresetTested(style); }
                             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus("译文完成，但提示测试记录未能保存。"); }
@@ -454,7 +467,7 @@ public partial class ToolWindow : Window, IDisposable
                 }
                 else
                 {
-                    if (_warnings.Length == 0)
+                    if (!isDirect && _warnings.Length == 0)
                     {
                         try { _app.MarkPresetTested(style); }
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus("译文完成，但提示测试记录未能保存。"); }

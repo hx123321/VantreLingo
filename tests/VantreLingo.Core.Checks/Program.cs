@@ -411,6 +411,23 @@ Add("术语最长短语优先并遵守语言和上下文", () =>
     Assert(glossary.Match("气垫梳", "zh-CN", "en", ["software"]).Count == 0);
     Assert(glossary.Candidates("气垫梳", LanguageRoutingService.Plan("auto", "ja", new()), ["product"]).Count == 0);
 });
+Add("本地直译命中 active 词条时不调用模型", () =>
+{
+    var glossary = new GlossaryCatalog { Terms = [
+        new() { Id = "t1", Status = "active", SourceLanguage = "zh-CN", TargetLanguage = "en", Source = "气垫梳", Target = "cushion brush", Direction = "forward" }] };
+    var plan = LanguageRoutingService.Plan("auto", null, new());
+    var hit = DirectTranslation.TryTranslate("气垫梳", plan, glossary);
+    Assert(hit is not null && hit.Translation == "cushion brush" && hit.TargetLanguage == "en");
+    Assert(DirectTranslation.TryTranslate("不存在的词", plan, glossary) is null);
+    var draft = new GlossaryCatalog { Terms = [
+        new() { Id = "t1", Status = "draft", SourceLanguage = "zh-CN", TargetLanguage = "en", Source = "气垫梳", Target = "cushion brush", Direction = "forward" }] };
+    Assert(DirectTranslation.TryTranslate("气垫梳", plan, draft) is null);
+    var fixedDe = LanguageRoutingService.Plan("auto", "de", new());
+    Assert(DirectTranslation.TryTranslate("气垫梳", fixedDe, glossary) is null);
+    var both = new GlossaryCatalog { Terms = [
+        new() { Id = "t2", Status = "active", SourceLanguage = "en", TargetLanguage = "zh-CN", Source = "brush", Target = "刷", Direction = "both" }] };
+    Assert(DirectTranslation.TryTranslate("刷", LanguageRoutingService.Plan("auto", null, new()), both)?.Translation == "brush");
+});
 Add("术语方向与拉丁词边界，草稿和禁用词不应用", () =>
 {
     var glossary = new GlossaryCatalog { Terms = [new() { Id = "one", Status = "active", SourceLanguage = "en", TargetLanguage = "zh-CN", Source = "brush", Target = "刷", Direction = "both" }] };

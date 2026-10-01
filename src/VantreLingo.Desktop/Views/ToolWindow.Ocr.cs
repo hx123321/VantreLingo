@@ -18,8 +18,6 @@ public partial class ToolWindow
         _snapshot = null; _readOnly = false;
         try
         {
-            OcrService.RequireIdentity();
-            if (OcrService.InstalledLanguages().Count == 0) throw new InvalidOperationException("没有已安装的 OCR 语言。请在系统中安装能力，或手动输入文本。");
             Hide();
             _screenshot = new ScreenshotSelection();
             var accepted = _screenshot.ShowDialog();
@@ -27,16 +25,35 @@ public partial class ToolWindow
             _screenshot = null;
             if (accepted != true || image is null)
             { _operations.TryPublish(operation, () => { _app.ShowTool(); SetStatus("截图已取消，没有保存或上传图像。"); }); return; }
-            SetStatus("正在本地识别…");
-            var text = await OcrService.RecognizeAsync(image, _app.Settings.Ocr.Language, operation.Token);
+            // 截图先保留并开放复制/另存；OCR 不可用也不影响截图功能。
+            _operations.TryPublish(operation, () =>
+            {
+                _screenshotImage = image;
+                CopyImageButton.IsEnabled = SaveImageButton.IsEnabled = true;
+            });
+            string text;
+            try
+            {
+                SetStatus("正在本地识别…");
+                text = await OcrService.RecognizeAsync(image, _app.Settings.Ocr.Language, operation.Token);
+            }
+            catch (Exception ex) when (ex is InvalidOperationException)
+            {
+                var reason = ex.Message;
+                _operations.TryPublish(operation, () =>
+                {
+                    TranslationView();
+                    IntentLabel.Text = "截图已保留 · OCR 不可用";
+                    _app.ShowTool(); SetStatus($"截图已保留，可复制/另存。OCR 不可用：{reason}");
+                });
+                return;
+            }
             _operations.TryPublish(operation, () =>
             {
                 TranslationView(); _settingInput = true;
                 try { InputText.Text = text; } finally { _settingInput = false; }
                 OutputText.IsReadOnly = false;
                 IntentLabel.Text = "截图取字 · 请先校对识别文本";
-                _screenshotImage = image;
-                CopyImageButton.IsEnabled = SaveImageButton.IsEnabled = true;
                 _app.ShowTool(); SetStatus("本地 OCR 完成。识别文本可编辑，再主动选择翻译或客户整理。截图没有保存或上传，可用截图复制/另存。");
             });
         }
