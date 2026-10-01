@@ -248,7 +248,7 @@ public partial class ToolWindow : Window, IDisposable
             var fresh = await TryCopyAndReadAsync();
             if (fresh is not null)
             {
-                await TranslateClipboardWithTextAsync(fresh);
+                await TranslateClipboardWithTextAsync(fresh, useModel);
                 return;
             }
             var text = ClipboardReader.TryGetText();
@@ -258,7 +258,7 @@ public partial class ToolWindow : Window, IDisposable
                 _operations.TryPublish(operation, () => Report("没有取到新复制内容，剪贴板也没有可用文本。请先选中文本再按 Alt+C。", fast: false, armClipboardWatch: true));
                 return;
             }
-            await TranslateClipboardWithTextAsync(text);
+            await TranslateClipboardWithTextAsync(text, useModel);
         }
         catch
         {
@@ -682,6 +682,7 @@ public partial class ToolWindow : Window, IDisposable
         _snapshot = null;
         _miniFailed = false;
         try { _mini?.HideMini(); } catch { }
+        try { _screenshot?.Close(); } catch { }
         ResetInquiry();
         CopyButton.IsEnabled = ReplaceButton.IsEnabled = AppendButton.IsEnabled = CancelButton.IsEnabled = false;
         SetStatus("已取消。输入或调整语言后可重新翻译。");
@@ -718,7 +719,7 @@ public partial class ToolWindow : Window, IDisposable
     {
         if (_app.IsExiting) return;
         e.Cancel = true;
-        try { Cancel(); Hide(); _mini?.HideMini(); } catch { Hide(); }
+        try { Cancel(); Hide(); _mini?.HideMini(); _screenshot?.Close(); } catch { Hide(); }
     }
 
     public void Dispose()

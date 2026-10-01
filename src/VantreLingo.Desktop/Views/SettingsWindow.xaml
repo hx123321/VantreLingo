@@ -60,7 +60,7 @@
           <ComboBoxItem Content="原生安全写回" Tag="native" />
           <ComboBoxItem Content="剪贴板粘贴" Tag="paste" />
         </ComboBox>
-        <TextBlock Text="快速模式仅对可验证选区的原生文本框自动写回；其他控件保留结果供主动查看和复制。焦点或原文变化、译文有风险时不会自动写入。"
+        <TextBlock Text="自动写回优先尝试原生安全写回，失败转剪贴板粘贴；纯粘贴模式直接复制译文并回到目标窗口 Ctrl+V。焦点或原文变化、译文有风险时不会自动写入。"
                    TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12" />
         <CheckBox x:Name="ClearLanguageCheck" Content="清除最近外语记忆" Margin="0,0,0,12" />
         <TextBlock Text="仅在主动翻译或客户整理时向所选 Provider 发送输入文本。默认不保存正文或翻译历史，API key 由当前 Windows 用户加密保存。"

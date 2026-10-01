@@ -119,7 +119,8 @@ public partial class App : Application
         menu.Items.Add(_hotkeyToggle);
         menu.Items.Add(new Separator());
         Add("输入翻译", ShowTool);
-        Add("截图取字", () => { if (_tool is not null) _ = _tool.CaptureOcrAsync(); });
+        Add("截图", () => Fire(() => _tool?.CaptureScreenshotAsync()));
+        Add("截图取字", () => Fire(() => _tool?.CaptureOcrAsync()));
         Add("客户整理", () => { ShowTool(); _tool?.PrepareInquiry(); });
         Add("风格与术语", ShowLibrary);
         Add("设置", ShowSettings);
@@ -188,6 +189,7 @@ public partial class App : Application
             if (_tray is null) return;
             _tray.IconSource = (ImageSource)FindResource(_hotkeysOn ? "AppIcon" : "AppIconGray");
             _tray.ToolTipText = _hotkeysOn ? "VantreLingo" : "VantreLingo（快捷键已暂停）";
+            if (_hotkeyToggle is not null) _hotkeyToggle.IsChecked = _hotkeysOn;
         }
         catch { }
     }

@@ -75,7 +75,8 @@ public static class FreeTranslators
             catch (InvalidDataException) { effective = "zh-CN"; }
             if (effective.Equals("zh-CN", StringComparison.OrdinalIgnoreCase))
                 return Build(text, first, detected, "zh-CN", plan);
-            var (second, _) = await CallAsync(http, text, autoSource, MapCode(effective), ct);
+            // 检测与显式源语言不一致时纠正调用必须用 auto，否则源语言会被锁死。
+            var (second, _) = await CallAsync(http, text, "auto", MapCode(effective), ct);
             return Build(text, second, detected, effective, plan);
         }
 
@@ -147,7 +148,7 @@ public static class FreeTranslators
             if (effective.Equals("zh-CN", StringComparison.OrdinalIgnoreCase))
                 return Build(text, first, detected, "zh-CN", plan);
             var mapped = MapCode(effective) ?? throw new InvalidDataException("微软免费接口不支持该目标语言。");
-            var (second, _) = await CallAsync(http, text, source, mapped, ct);
+            var (second, _) = await CallAsync(http, text, null, mapped, ct);
             return Build(text, second, detected, effective, plan);
         }
 

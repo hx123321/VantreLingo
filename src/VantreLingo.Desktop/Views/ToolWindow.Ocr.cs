@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
+using VantreLingo.Core.Operations;
 using VantreLingo.Desktop.Infrastructure;
 namespace VantreLingo.Desktop.Views;
 
@@ -10,6 +11,44 @@ public partial class ToolWindow
     private ScreenshotSelection? _screenshot;
     private BitmapSource? _screenshotImage;
     private async void Ocr_Click(object sender, RoutedEventArgs e) => await CaptureOcrAsync();
+    private async void Screenshot_Click(object sender, RoutedEventArgs e) => await CaptureScreenshotAsync();
+
+    // 纯截图：框选即复制到剪贴板，可另存；不经过 OCR，普通 EXE 也可用，不上传图像。
+    internal async Task CaptureScreenshotAsync()
+    {
+        if (_screenshot is not null) return;
+        var operation = BeginOperation();
+        _snapshot = null; _readOnly = false;
+        try
+        {
+            var image = await CaptureScreenAsync(operation);
+            if (image is null)
+            { _operations.TryPublish(operation, () => { _app.ShowTool(); SetStatus("截图已取消，没有保存或上传图像。"); }); return; }
+            _operations.TryPublish(operation, () =>
+            {
+                _screenshotImage = image;
+                CopyImageButton.IsEnabled = SaveImageButton.IsEnabled = true;
+                try { Clipboard.SetImage(image); } catch { }
+                _app.ShowTool(); SetStatus("截图已复制到剪贴板，可另存。没有上传图像。");
+            });
+        }
+        catch (OperationCanceledException) { }
+        catch
+        {
+            _operations.TryPublish(operation, () =>
+            {
+                _app.ShowTool();
+                SetStatus("截图失败，请重试。没有保存或上传图像。");
+            });
+        }
+        finally
+        {
+            _screenshot = null;
+            _operations.TryPublish(operation, () => CancelButton.IsEnabled = false);
+            RestoreMainIfCurrent(operation);
+        }
+    }
+
     internal async Task CaptureOcrAsync()
     {
         // 避免热键连按打开多个框选层。
@@ -18,16 +57,8 @@ public partial class ToolWindow
         _snapshot = null; _readOnly = false;
         try
         {
-            Hide();
-            _screenshot = new ScreenshotSelection();
-            _screenshot.ShowOverlay();
-            bool accepted;
-            try { accepted = await _screenshot.WaitAsync(); }
-            catch { accepted = false; }
-            var image = _screenshot.Image;
-            try { _screenshot.Close(); } catch { }
-            _screenshot = null;
-            if (!accepted || image is null)
+            var image = await CaptureScreenAsync(operation);
+            if (image is null)
             { _operations.TryPublish(operation, () => { _app.ShowTool(); SetStatus("截图已取消，没有保存或上传图像。"); }); return; }
             // 截图先保留并开放复制/另存；OCR 不可用也不影响截图功能。
             _operations.TryPublish(operation, () =>
@@ -70,14 +101,60 @@ public partial class ToolWindow
                 SetStatus(ex is InvalidOperationException ? ex.Message : "本地 OCR 失败，请选择已安装语言或手动输入。没有上传截图。");
             });
         }
-        finally { _screenshot = null; _operations.TryPublish(operation, () => CancelButton.IsEnabled = false); }
+        finally
+        {
+            _screenshot = null;
+            _operations.TryPublish(operation, () => CancelButton.IsEnabled = false);
+            RestoreMainIfCurrent(operation);
+        }
+    }
+
+    // 全屏框选并返回图像；取消、失败或操作被取代时返回 null。永不抛异常。
+    private async Task<BitmapSource?> CaptureScreenAsync(Operation operation)
+    {
+        if (_screenshot is not null) return null;
+        ScreenshotSelection overlay;
+        try
+        {
+            Hide();
+            overlay = new ScreenshotSelection();
+        }
+        catch { return null; }
+        _screenshot = overlay;
+        try
+        {
+            overlay.ShowOverlay();
+            var wait = overlay.WaitAsync();
+            var cancelled = Task.Delay(System.Threading.Timeout.InfiniteTimeSpan, operation.Token);
+            var done = await Task.WhenAny(wait, cancelled);
+            if (done != wait)
+            {
+                try { await cancelled; } catch (OperationCanceledException) { }
+                try { overlay.Close(); } catch { }
+                return null;
+            }
+            var image = overlay.Image;
+            try { overlay.Close(); } catch { }
+            bool accepted;
+            try { accepted = await wait; } catch { accepted = false; }
+            return accepted ? image : null;
+        }
+        catch { return null; }
+        finally { _screenshot = null; }
+    }
+
+    private void RestoreMainIfCurrent(Operation operation)
+    {
+        // 本操作仍是最新时才恢复主窗口；被新操作取代则把界面留给新流程。
+        try { if (ReferenceEquals(_operation, operation) && !IsVisible && !_app.IsExiting) _app.ShowTool(); }
+        catch { }
     }
 
     private void CopyImage_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            if (_screenshotImage is null) { SetStatus("没有可用截图，请先按 Alt+S 框选。"); return; }
+            if (_screenshotImage is null) { SetStatus("没有可用截图，请先截图。"); return; }
             Clipboard.SetImage(_screenshotImage);
             SetStatus("截图已复制到剪贴板。");
         }
@@ -90,12 +167,12 @@ public partial class ToolWindow
     {
         try
         {
-            if (_screenshotImage is null) { SetStatus("没有可用截图，请先按 Alt+S 框选。"); return; }
+            if (_screenshotImage is null) { SetStatus("没有可用截图，请先截图。"); return; }
             var dialog = new SaveFileDialog { Filter = "PNG 图片|*.png", FileName = "screenshot.png" };
             if (dialog.ShowDialog(this) != true) return;
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(_screenshotImage));
-            using var stream = File.OpenWrite(dialog.FileName);
+            using var stream = File.Create(dialog.FileName);
             encoder.Save(stream);
             SetStatus("截图已按你的选择另存。");
         }

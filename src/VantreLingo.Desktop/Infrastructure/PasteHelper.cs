@@ -47,17 +47,4 @@ internal static class PasteHelper
             return false;
         }
     }
-
-    public static bool PasteText(string translation)
-    {
-        try
-        {
-            if (!ClipboardReader.TrySetText(translation)) return false;
-            return SendPaste();
-        }
-        catch
-        {
-            return false;
-        }
-    }
 }

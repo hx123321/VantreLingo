@@ -50,19 +50,18 @@ internal sealed class HotkeyMapper(
 
     public static void Validate(HotkeySettings settings)
     {
-        var models = new List<HotkeyModel?>();
-        foreach (var text in new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ScreenshotOcr, settings.ClipboardTranslate, settings.PasteTranslation })
-            models.Add(Parse(text));
+        var bases = new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ScreenshotOcr,
+            settings.ClipboardTranslate, settings.PasteTranslation }
+            .Select(Parse).OfType<HotkeyModel>().ToList();
         // 双路由展开：阅读/写作/复制翻译各可再带一个 +Ctrl 走模型版本。
-        var effective = new List<HotkeyModel>();
+        var effective = new List<HotkeyModel>(bases);
         foreach (var text in new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ClipboardTranslate })
         {
-            var (free, model) = Split(text);
-            if (free is { } f) effective.Add(f);
-            if (model is { } m) effective.Add(m);
+            if (Parse(text) is not { } baseKey) continue;
+            if (baseKey.ModifierKeys.HasFlag(ModifierKeys.Control)) continue; // 本身已带 Ctrl，只走模型。
+            var variant = baseKey with { Ctrl = true };
+            effective.Add(variant);
         }
-        foreach (var parsed in models.OfType<HotkeyModel>())
-            if (!effective.Contains(parsed)) effective.Add(parsed);
         if (effective.GroupBy(h => h).Any(g => g.Count() > 1))
             throw new InvalidDataException("热键不能相同（含自动派生的 +Ctrl 走模型版本）。");
     }

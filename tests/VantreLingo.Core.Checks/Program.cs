@@ -483,6 +483,23 @@ Add("免费分块按上限切分且可还原", () =>
     var chunks = FreeTranslators.Chunk(text).ToArray();
     Assert(chunks.Length == 3 && chunks.All(c => c.Length <= 1000) && string.Concat(chunks) == text);
 });
+AddAsync("显式源语言误判时纠正调用改用自动检测", async () =>
+{
+    var sources = new List<string>();
+    using var http = new HttpClient(new StubHandler((message, _) =>
+    {
+        var query = message.RequestUri!.Query;
+        sources.Add(query.Contains("sl=en") ? "en" : "auto");
+        var target = query.Contains("tl=en") ? "en" : "zh-CN";
+        var text = target == "en" ? "Hello" : "你好";
+        var body = JsonSerializer.Serialize(new object?[] { new object?[] { new object?[] { text, "x", null, null, 3 } }, null, "zh-CN" });
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }));
+    var result = await FreeTranslators.TranslateAsync(http, "google", "你好",
+        LanguageRoutingService.Plan("en", null, new() { LastForeignLanguage = "en" }), 60, CancellationToken.None);
+    Assert(result.TargetLanguage == "en");
+    Assert(sources.Count == 2 && sources[0] == "en" && sources[1] == "auto");
+});
 Add("本地直译命中 active 词条时不调用模型", () =>
 {
     var glossary = new GlossaryCatalog { Terms = [

@@ -66,6 +66,7 @@
         <Button.ContextMenu>
           <ContextMenu>
             <MenuItem Header="截图取字" Click="Ocr_Click" />
+            <MenuItem Header="截图（存剪贴板）" Click="Screenshot_Click" />
             <MenuItem x:Name="CopyImageButton" Header="复制截图" Click="CopyImage_Click" IsEnabled="False" />
             <MenuItem x:Name="SaveImageButton" Header="另存截图" Click="SaveImage_Click" IsEnabled="False" />
             <Separator />
