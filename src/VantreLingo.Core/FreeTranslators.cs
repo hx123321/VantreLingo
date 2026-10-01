@@ -64,8 +64,8 @@ public static class FreeTranslators
             {
                 var target = MapCode(explicitTarget);
                 var source = plan.Source == "auto" ? "auto" : MapCode(plan.Source);
-                var (translation, detected) = await CallAsync(http, text, source, target, ct);
-                return Build(text, translation, detected ?? plan.Source, target, plan);
+                var (explicitTranslation, explicitDetected) = await CallAsync(http, text, source, target, ct);
+                return Build(text, explicitTranslation, explicitDetected ?? plan.Source, target, plan);
             }
             var autoSource = plan.Source == "auto" ? "auto" : MapCode(plan.Source);
             var (first, detectedRaw) = await CallAsync(http, text, autoSource, "zh-CN", ct);
@@ -135,9 +135,9 @@ public static class FreeTranslators
             string? source = plan.Source == "auto" ? null : MapCode(plan.Source);
             if (plan.ExplicitTarget is { } explicitTarget)
             {
-                var target = MapCode(explicitTarget);
-                var (translation, detected) = await CallAsync(http, text, source, target, ct);
-                return Build(text, translation, detected ?? plan.Source, target, plan);
+                var target = MapCode(explicitTarget) ?? throw new InvalidDataException("微软免费接口不支持该目标语言。");
+                var (explicitTranslation, explicitDetected) = await CallAsync(http, text, source, target, ct);
+                return Build(text, explicitTranslation, explicitDetected ?? plan.Source, target, plan);
             }
             var (first, detectedRaw) = await CallAsync(http, text, source, "zh-Hans", ct);
             var detected = NormalizeCode(detectedRaw ?? "auto");
@@ -146,7 +146,7 @@ public static class FreeTranslators
             catch (InvalidDataException) { effective = "zh-CN"; }
             if (effective.Equals("zh-CN", StringComparison.OrdinalIgnoreCase))
                 return Build(text, first, detected, "zh-CN", plan);
-            var mapped = MapCode(effective);
+            var mapped = MapCode(effective) ?? throw new InvalidDataException("微软免费接口不支持该目标语言。");
             var (second, _) = await CallAsync(http, text, source, mapped, ct);
             return Build(text, second, detected, effective, plan);
         }
