@@ -1,11 +1,14 @@
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Threading;
 using VantreLingo.Core;
 using VantreLingo.Desktop.Infrastructure;
 
 namespace VantreLingo.Desktop.Views;
 
+// 跟随小窗：只显示译文。原文默认截 5 字，悬停显示全文；点击译文复制。
+// 粘贴/重试/主窗口走全局热键（Alt+V / Alt+C）与托盘，不在这里堆按钮。
 public partial class MiniResultWindow : Window
 {
     public Action? CopyRequested { get; set; }
@@ -27,6 +30,14 @@ public partial class MiniResultWindow : Window
     public MiniResultWindow()
     {
         InitializeComponent();
+        TranslationBox.PreviewMouseLeftButtonUp += (_, _) =>
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(TranslationBox.SelectedText)) CopyRequested?.Invoke();
+            }
+            catch { }
+        };
         _watchTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
         _watchTimer.Tick += (_, _) => WatchTick();
         Closed += (_, _) => { try { _watchTimer.Stop(); } catch { } };
@@ -39,10 +50,9 @@ public partial class MiniResultWindow : Window
             _hasTranslation = false;
             _watchEnabled = false;
             StatusLabel.Text = "正在翻译…";
-            SourcePreview.Text = Truncate(sourcePreview);
+            SetSource(sourcePreview);
             TranslationBox.Clear();
             WatchHint.Visibility = Visibility.Collapsed;
-            CopyButton.IsEnabled = PasteButton.IsEnabled = false;
             PositionNearCursor();
             Show();
         }
@@ -55,12 +65,10 @@ public partial class MiniResultWindow : Window
         {
             _hasTranslation = !string.IsNullOrWhiteSpace(translation);
             _watchEnabled = false;
-            StatusLabel.Text = isFast ? "快速完成" : "翻译完成，请检查后使用";
-            SourcePreview.Text = Truncate(source);
+            StatusLabel.Text = isFast ? "快速完成" : "翻译完成 · 点击复制";
+            SetSource(source);
             TranslationBox.Text = translation;
             WatchHint.Visibility = Visibility.Collapsed;
-            CopyButton.IsEnabled = _hasTranslation;
-            PasteButton.IsEnabled = _hasTranslation && canReplace;
             PositionNearCursor();
             Show();
         }
@@ -74,12 +82,11 @@ public partial class MiniResultWindow : Window
             _hasTranslation = false;
             StatusLabel.Text = message;
             TranslationBox.Clear();
-            CopyButton.IsEnabled = PasteButton.IsEnabled = false;
             if (armClipboardWatch)
             {
                 _watchEnabled = true;
                 _lastClipboardHash = ClipboardReader.CurrentHash();
-                WatchHint.Text = "选区读取失败：已进入兼容模式。复制新文本（Ctrl+C）后自动翻译，或按 Alt+C 立即翻译剪贴板。";
+                WatchHint.Text = "复制新文本后自动翻译，或按 Alt+C 立即翻译剪贴板。";
                 WatchHint.Visibility = Visibility.Visible;
                 if (!_watchTimer.IsEnabled) _watchTimer.Start();
             }
@@ -116,6 +123,32 @@ public partial class MiniResultWindow : Window
         catch { }
     }
 
+    private void SetSource(string text)
+    {
+        try
+        {
+            SourcePreview.Text = TruncateSource(text);
+            SourcePreview.ToolTip = text.Length > SourcePreview.Text.Length ? text : null;
+        }
+        catch
+        {
+            SourcePreview.Text = "";
+            SourcePreview.ToolTip = null;
+        }
+    }
+
+    private static string TruncateSource(string text)
+    {
+        try
+        {
+            if (text.Length <= 5) return text;
+            var shortText = text[..5];
+            if (char.IsHighSurrogate(shortText[^1])) shortText = shortText[..^1];
+            return shortText + "…";
+        }
+        catch { return string.Empty; }
+    }
+
     private void WatchTick()
     {
         try
@@ -147,41 +180,6 @@ public partial class MiniResultWindow : Window
             Top = top;
         }
         catch { }
-    }
-
-    private static string Truncate(string text)
-    {
-        try
-        {
-            if (text.Length <= 200) return text;
-            return text[..200] + "…";
-        }
-        catch { return string.Empty; }
-    }
-
-    private void Copy_Click(object sender, RoutedEventArgs e)
-    {
-        try { CopyRequested?.Invoke(); } catch { }
-    }
-
-    private void Paste_Click(object sender, RoutedEventArgs e)
-    {
-        try { PasteRequested?.Invoke(); } catch { }
-    }
-
-    private void Clipboard_Click(object sender, RoutedEventArgs e)
-    {
-        try { ClipboardRequested?.Invoke(); } catch { }
-    }
-
-    private void Main_Click(object sender, RoutedEventArgs e)
-    {
-        try { OpenMainRequested?.Invoke(); } catch { }
-    }
-
-    private void Close_Click(object sender, RoutedEventArgs e)
-    {
-        try { HideMini(); } catch { }
     }
 
     [StructLayout(LayoutKind.Sequential)]

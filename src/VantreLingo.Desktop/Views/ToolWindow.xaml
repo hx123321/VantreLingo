@@ -1,9 +1,9 @@
 <Window x:Class="VantreLingo.Desktop.Views.ToolWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="VantreLingo" Width="780" Height="620" MinWidth="580" MinHeight="440"
+        Title="VantreLingo" Width="760" Height="600" MinWidth="560" MinHeight="420"
         WindowStartupLocation="CenterScreen">
-  <Grid Margin="24">
+  <Grid Margin="20">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
@@ -12,16 +12,18 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
-    <DockPanel Margin="0,0,0,20">
-      <Button DockPanel.Dock="Right" Content="风格与术语" Click="Library_Click" />
-      <Button DockPanel.Dock="Right" Content="设置" Click="Settings_Click" Margin="0" />
+    <DockPanel Margin="0,0,0,16">
+      <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+        <Button Content="风格与术语" Click="Library_Click" />
+        <Button Content="设置" Click="Settings_Click" Margin="0" />
+      </StackPanel>
       <StackPanel>
-        <TextBlock Text="VantreLingo" FontSize="24" FontWeight="SemiBold" Foreground="#292447" />
+        <TextBlock Text="VantreLingo" FontSize="20" FontWeight="SemiBold" Foreground="#292447" />
         <ComboBox x:Name="StyleList" DisplayMemberPath="Name" SelectedValuePath="Id" MinWidth="200" Margin="0,6,0,0" SelectionChanged="Style_Changed" />
         <TextBlock x:Name="IntentLabel" Text="输入翻译" Foreground="#647085" Margin="0,4,0,0" />
       </StackPanel>
     </DockPanel>
-    <Grid Grid.Row="1" Margin="0,0,0,16">
+    <Grid Grid.Row="1" Margin="0,0,0,12">
       <Grid.ColumnDefinitions>
         <ColumnDefinition Width="*" /><ColumnDefinition Width="40" /><ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
@@ -31,43 +33,55 @@
       <ComboBox Grid.Column="2" x:Name="TargetLanguage" IsEditable="True" IsTextSearchEnabled="True"
                 DisplayMemberPath="Label" TextSearch.TextPath="Label" Padding="8" ToolTip="智能目标：外语译中文；中文译最近外语，首次译英文" />
     </Grid>
-    <Grid Grid.Row="2" x:Name="TranslationPanel">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-      <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-      <TextBlock Text="原文" Foreground="#647085" Margin="0,0,0,8" />
-      <TextBlock Grid.Column="2" Text="译文" Foreground="#647085" Margin="0,0,0,8" />
-      <TextBox Grid.Row="1" x:Name="InputText" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap"
-               VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" MaxLength="30000" />
-      <TextBox Grid.Row="1" Grid.Column="2" x:Name="OutputText" AcceptsReturn="True" AcceptsTab="True"
-               TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" />
-    </Grid>
-    <Grid Grid.Row="2" x:Name="InquiryPanel" Visibility="Collapsed">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
-      <TextBox x:Name="InquirySource" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" />
-      <TabControl Grid.Column="2">
-        <TabItem Header="客户信息"><DataGrid x:Name="CustomerGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionUnit="FullRow">
-          <DataGrid.Columns><DataGridTextColumn Header="字段" Binding="{Binding DisplayName}" IsReadOnly="True"/><DataGridComboBoxColumn Header="状态" SelectedValueBinding="{Binding Status, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Key" DisplayMemberPath="Value" x:Name="CustomerStatusColumn"/><DataGridTextColumn Header="值" Binding="{Binding Value}"/><DataGridTextColumn Header="证据" Binding="{Binding Evidence}" IsReadOnly="True"/><DataGridTextColumn Header="说明" Binding="{Binding Reason}" IsReadOnly="True"/></DataGrid.Columns>
-        </DataGrid></TabItem>
-        <TabItem Header="分产品需求"><DockPanel><ComboBox DockPanel.Dock="Top" x:Name="ProductList" DisplayMemberPath="DisplayName" SelectionChanged="Product_Changed"/><DataGrid x:Name="ProductGrid" AutoGenerateColumns="False" CanUserAddRows="False"><DataGrid.Columns><DataGridTextColumn Header="字段" Binding="{Binding DisplayName}" IsReadOnly="True"/><DataGridComboBoxColumn Header="状态" SelectedValueBinding="{Binding Status, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Key" DisplayMemberPath="Value" x:Name="ProductStatusColumn"/><DataGridTextColumn Header="值" Binding="{Binding Value}"/><DataGridTextColumn Header="证据" Binding="{Binding Evidence}" IsReadOnly="True"/><DataGridTextColumn Header="说明" Binding="{Binding Reason}" IsReadOnly="True"/></DataGrid.Columns></DataGrid></DockPanel></TabItem>
-        <TabItem Header="缺项 / 歧义 / 冲突"><TextBox x:Name="InquiryIssues" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/></TabItem>
-        <TabItem Header="建议追问"><TextBox x:Name="InquiryQuestions" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto"/></TabItem>
-      </TabControl>
-    </Grid>
-    <WrapPanel Grid.Row="3" Margin="0,16,0,12">
-      <Button Content="截图取字" Click="Ocr_Click" />
-      <Button x:Name="CopyImageButton" Content="复制截图" Click="CopyImage_Click" IsEnabled="False" />
-      <Button x:Name="SaveImageButton" Content="另存截图" Click="SaveImage_Click" IsEnabled="False" />
-      <Button Content="客户整理" Click="Inquiry_Click" />
-      <Button Content="返回翻译" Click="TranslationView_Click" />
-      <Button x:Name="InquiryMarkdownButton" Content="复制 Markdown" Click="InquiryMarkdown_Click" IsEnabled="False" />
-      <Button x:Name="InquiryJsonButton" Content="复制 JSON" Click="InquiryJson_Click" IsEnabled="False" />
-      <Button x:Name="SaveInquiryButton" Content="另存整理" Click="SaveInquiry_Click" IsEnabled="False" />
+    <Border Grid.Row="2" Background="White" CornerRadius="8" Padding="12">
+      <Grid x:Name="TranslationPanel">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="16" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+        <TextBlock Text="原文" Foreground="#647085" Margin="0,0,0,8" />
+        <TextBlock Grid.Column="2" Text="译文" Foreground="#647085" Margin="0,0,0,8" />
+        <TextBox Grid.Row="1" x:Name="InputText" AcceptsReturn="True" AcceptsTab="True" TextWrapping="Wrap" BorderThickness="0"
+                 VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" MaxLength="30000" />
+        <TextBox Grid.Row="1" Grid.Column="2" x:Name="OutputText" AcceptsReturn="True" AcceptsTab="True" BorderThickness="0"
+                 TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top" />
+      </Grid>
+    </Border>
+    <Border Grid.Row="2" x:Name="InquiryPanel" Visibility="Collapsed" Background="White" CornerRadius="8" Padding="12">
+      <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="16"/><ColumnDefinition Width="2*"/></Grid.ColumnDefinitions>
+        <TextBox x:Name="InquirySource" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" BorderThickness="0" />
+        <TabControl Grid.Column="2">
+          <TabItem Header="客户信息"><DataGrid x:Name="CustomerGrid" AutoGenerateColumns="False" CanUserAddRows="False" SelectionUnit="FullRow" BorderThickness="0">
+            <DataGrid.Columns><DataGridTextColumn Header="字段" Binding="{Binding DisplayName}" IsReadOnly="True"/><DataGridComboBoxColumn Header="状态" SelectedValueBinding="{Binding Status, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Key" DisplayMemberPath="Value" x:Name="CustomerStatusColumn"/><DataGridTextColumn Header="值" Binding="{Binding Value}"/><DataGridTextColumn Header="证据" Binding="{Binding Evidence}" IsReadOnly="True"/><DataGridTextColumn Header="说明" Binding="{Binding Reason}" IsReadOnly="True"/></DataGrid.Columns>
+          </DataGrid></TabItem>
+          <TabItem Header="分产品需求"><DockPanel><ComboBox DockPanel.Dock="Top" x:Name="ProductList" DisplayMemberPath="DisplayName" SelectionChanged="Product_Changed"/><DataGrid x:Name="ProductGrid" AutoGenerateColumns="False" CanUserAddRows="False" BorderThickness="0"><DataGrid.Columns><DataGridTextColumn Header="字段" Binding="{Binding DisplayName}" IsReadOnly="True"/><DataGridComboBoxColumn Header="状态" SelectedValueBinding="{Binding Status, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Key" DisplayMemberPath="Value" x:Name="ProductStatusColumn"/><DataGridTextColumn Header="值" Binding="{Binding Value}"/><DataGridTextColumn Header="证据" Binding="{Binding Evidence}" IsReadOnly="True"/><DataGridTextColumn Header="说明" Binding="{Binding Reason}" IsReadOnly="True"/></DataGrid.Columns></DataGrid></DockPanel></TabItem>
+          <TabItem Header="缺项 / 歧义 / 冲突"><TextBox x:Name="InquiryIssues" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" BorderThickness="0"/></TabItem>
+          <TabItem Header="建议追问"><TextBox x:Name="InquiryQuestions" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" BorderThickness="0"/></TabItem>
+        </TabControl>
+      </Grid>
+    </Border>
+    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,12,0,8">
       <Button x:Name="TranslateButton" Content="翻译" Click="Translate_Click" IsDefault="False" ToolTip="直接点击走免费接口，按住 Ctrl 点击走模型" />
       <Button x:Name="CancelButton" Content="取消" Click="Cancel_Click" IsEnabled="False" />
-      <Button x:Name="CopyButton" Content="复制译文" Click="Copy_Click" IsEnabled="False" />
-      <Button x:Name="ReplaceButton" Content="替换选区" Click="Replace_Click" IsEnabled="False" />
-      <Button x:Name="AppendButton" Content="追加译文" Click="Append_Click" IsEnabled="False" />
-    </WrapPanel>
+      <Button Content="更多操作" Click="More_Click" Margin="0">
+        <Button.ContextMenu>
+          <ContextMenu>
+            <MenuItem Header="截图取字" Click="Ocr_Click" />
+            <MenuItem x:Name="CopyImageButton" Header="复制截图" Click="CopyImage_Click" IsEnabled="False" />
+            <MenuItem x:Name="SaveImageButton" Header="另存截图" Click="SaveImage_Click" IsEnabled="False" />
+            <Separator />
+            <MenuItem Header="客户整理" Click="Inquiry_Click" />
+            <MenuItem Header="返回翻译" Click="TranslationView_Click" />
+            <MenuItem x:Name="InquiryMarkdownButton" Header="复制 Markdown" Click="InquiryMarkdown_Click" IsEnabled="False" />
+            <MenuItem x:Name="InquiryJsonButton" Header="复制 JSON" Click="InquiryJson_Click" IsEnabled="False" />
+            <MenuItem x:Name="SaveInquiryButton" Header="另存整理" Click="SaveInquiry_Click" IsEnabled="False" />
+            <Separator />
+            <MenuItem x:Name="CopyButton" Header="复制译文" Click="Copy_Click" IsEnabled="False" />
+            <MenuItem x:Name="ReplaceButton" Header="替换选区" Click="Replace_Click" IsEnabled="False" />
+            <MenuItem x:Name="AppendButton" Header="追加译文" Click="Append_Click" IsEnabled="False" />
+          </ContextMenu>
+        </Button.ContextMenu>
+      </Button>
+    </StackPanel>
     <Expander Grid.Row="4" Header="文本 Diff（仅比较文字，不证明翻译正确）" Margin="0,0,0,8">
       <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
         <TextBlock x:Name="DiffText" TextWrapping="Wrap" />

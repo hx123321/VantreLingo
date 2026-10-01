@@ -688,6 +688,18 @@ public partial class ToolWindow : Window, IDisposable
     }
 
     private void Settings_Click(object sender, RoutedEventArgs e) => _app.ShowSettings();
+    private void More_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is Button button && button.ContextMenu is { } menu)
+            {
+                menu.PlacementTarget = button;
+                menu.IsOpen = true;
+            }
+        }
+        catch { }
+    }
     private void Copy_Click(object sender, RoutedEventArgs e)
     {
         if (_operation is null || !CopyButton.IsEnabled || string.IsNullOrWhiteSpace(OutputText.Text)) return;

@@ -20,9 +20,9 @@
       </DrawingImage.Drawing>
     </DrawingImage>
     <Style TargetType="Window">
-      <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI" />
+      <Setter Property="FontFamily" Value="Segoe UI Variable, Segoe UI, Microsoft YaHei UI" />
       <Setter Property="FontSize" Value="14" />
-      <Setter Property="Background" Value="#F7F8FC" />
+      <Setter Property="Background" Value="#F9F9F9" />
       <Setter Property="Icon" Value="{StaticResource AppIcon}" />
     </Style>
     <Style TargetType="Button">

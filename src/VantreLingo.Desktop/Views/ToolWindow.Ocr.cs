@@ -20,10 +20,14 @@ public partial class ToolWindow
         {
             Hide();
             _screenshot = new ScreenshotSelection();
-            var accepted = _screenshot.ShowDialog();
+            _screenshot.ShowOverlay();
+            bool accepted;
+            try { accepted = await _screenshot.WaitAsync(); }
+            catch { accepted = false; }
             var image = _screenshot.Image;
+            try { _screenshot.Close(); } catch { }
             _screenshot = null;
-            if (accepted != true || image is null)
+            if (!accepted || image is null)
             { _operations.TryPublish(operation, () => { _app.ShowTool(); SetStatus("截图已取消，没有保存或上传图像。"); }); return; }
             // 截图先保留并开放复制/另存；OCR 不可用也不影响截图功能。
             _operations.TryPublish(operation, () =>
