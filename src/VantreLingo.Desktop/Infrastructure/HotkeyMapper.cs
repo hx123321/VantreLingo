@@ -106,7 +106,8 @@ internal sealed class HotkeyMapper(
         HotkeyManager.Current.AddOrReplace(id, key.CharKey, key.ModifierKeys, (_, e) =>
         {
             e.Handled = true;
-            action();
+            try { action(); }
+            catch (Exception ex) { App.LogCrash(ex); }
         });
     }
 

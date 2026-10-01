@@ -26,6 +26,7 @@ public partial class SettingsWindow : Window
         AutoCopyCheck.IsChecked = app.Settings.Capture.AutoCopyFallback;
         FreeEngine.SelectedValue = app.Settings.FreeTranslation.Engine;
         WritingMode.SelectedValue = app.Settings.Writing.Mode;
+        WritebackMode.SelectedValue = app.Settings.Writing.Writeback;
         LanguageMode.SelectedValue = app.Settings.Language.Mode; FixedTargetText.Text = app.Settings.Language.FixedTarget ?? "";
         var languages = new List<OcrChoice> { new(null, "自动：系统首选 OCR 语言") };
         try { languages.AddRange(OcrService.InstalledLanguages().Select(l => new OcrChoice(l.LanguageTag, l.DisplayName + " · " + l.LanguageTag))); }
@@ -110,7 +111,8 @@ public partial class SettingsWindow : Window
         var providers = _draft with { SelectedProviderId = _editing!.Id };
         var settings = _app.Settings with
         {
-            Writing = _app.Settings.Writing with { Mode = WritingMode.SelectedValue as string ?? "review" },
+            Writing = _app.Settings.Writing with { Mode = WritingMode.SelectedValue as string ?? "review",
+                Writeback = WritebackMode.SelectedValue as string ?? "auto" },
             Hotkeys = new() { ReadTranslate = ReadHotkeyText.Text.Trim(), WriteTranslate = WriteHotkeyText.Text.Trim(), ScreenshotOcr = OcrHotkeyText.Text.Trim(),
                 ClipboardTranslate = ClipboardHotkeyText.Text.Trim(), PasteTranslation = PasteHotkeyText.Text.Trim() },
             Capture = new() { AutoCopyFallback = AutoCopyCheck.IsChecked == true },

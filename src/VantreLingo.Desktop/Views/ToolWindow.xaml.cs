@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -34,6 +35,20 @@ public partial class ToolWindow : Window, IDisposable
     private MiniResultWindow? _mini;
     private bool _miniFailed;
     private bool _lastUseModel;
+    private nint _hotkeyForeground;
+
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint hWnd);
+    [DllImport("user32.dll")]
+    private static extern bool IsWindow(nint hWnd);
+
+    private static nint CurrentForeground()
+    {
+        try { return GetForegroundWindow(); }
+        catch { return 0; }
+    }
 
     internal ToolWindow(App app, HttpClient http)
     {
@@ -136,6 +151,7 @@ public partial class ToolWindow : Window, IDisposable
             _readOnly = readOnly;
             _miniFailed = false;
             _lastUseModel = useModel;
+            _hotkeyForeground = CurrentForeground();
             SetStatus("正在读取选区…");
             EnsureMini().ShowWorking("正在读取选区…");
             CaptureOutcome outcome;
@@ -291,6 +307,7 @@ public partial class ToolWindow : Window, IDisposable
             var operation = BeginOperation();
             _miniFailed = false;
             _lastUseModel = useModel;
+            _hotkeyForeground = CurrentForeground();
             _readOnly = false;
             var snapshot = new SelectionSnapshot(operation.Id, 0, 0, null, "Clipboard",
                 safe, SelectionSnapshot.Hash(safe), DateTimeOffset.UtcNow, null);
@@ -333,46 +350,17 @@ public partial class ToolWindow : Window, IDisposable
                 EnsureMini().ShowStatusOnly("没有可用译文：请先用快捷键翻译，出现小窗译文后再按 Alt+V。");
                 return;
             }
-            var translation = OutputText.Text;
-            string? error = null;
             _operations.TryPublish(operation, () =>
             {
-                // 有合法选区时走原生安全写回；剪贴板来源（无 Locator）走兼容粘贴。
-                if (_snapshot?.Locator is not null)
+                var error = ApplyWriteback(WritebackIntent.Review, WritebackAction.Replace, allowPaste: true);
+                if (error is null)
                 {
-                    error = Apply(WritebackIntent.Review, WritebackAction.Replace);
-                    if (error is null)
-                    {
-                        EnsureMini().ShowStatusOnly("已替换原选区。");
-                        SetStatus("已通过 Alt+V 替换原选区。");
-                    }
-                    else
-                    {
-                        EnsureMini().ShowFailure(error, armClipboardWatch: false);
-                        SetStatus(error);
-                    }
+                    EnsureMini().ShowStatusOnly("已替换/粘贴译文。");
                 }
                 else
                 {
-                    try { _mini?.HideMini(); } catch { }
-                    var ok = PasteHelper.PasteText(translation);
-                    if (ok)
-                    {
-                        SetStatus("译文已放入剪贴板并发送粘贴，请检查目标位置。");
-                        CommitLanguage();
-                    }
-                    else
-                    {
-                        if (ClipboardReader.TrySetText(translation))
-                        {
-                            EnsureMini().ShowStatusOnly("已复制译文，自动粘贴失败，请手动按 Ctrl+V。");
-                            SetStatus("剪贴板已更新，自动粘贴失败，请手动粘贴。");
-                        }
-                        else
-                        {
-                            EnsureMini().ShowFailure("粘贴失败：剪贴板被占用，请稍后重试。", armClipboardWatch: false);
-                        }
-                    }
+                    EnsureMini().ShowFailure(error, armClipboardWatch: false);
+                    SetStatus(error);
                 }
             });
             await Task.CompletedTask;
@@ -469,7 +457,7 @@ public partial class ToolWindow : Window, IDisposable
                     {
                         // 所有权临界区内校验、一次写回和提交记忆；旧请求不能产生任何副作用。
                         // 快速失败仍保持快速模式，不切换 Writing.Mode。
-                        var error = Apply(WritebackIntent.Fast, WritebackAction.Replace);
+                        var error = ApplyWriteback(WritebackIntent.Fast, WritebackAction.Replace, allowPaste: fromHotkey);
                         if (error is not null)
                         {
                             IntentLabel.Text = "快速写回已阻止 · 可主动审查和复制";
@@ -544,11 +532,30 @@ public partial class ToolWindow : Window, IDisposable
             (!_readOnly && _snapshot is { Locator: null } ? "\n该控件仅支持审查和复制。" : ""));
     }
 
-    private string? Apply(WritebackIntent intent, WritebackAction action)
+    private string? ApplyWriteback(WritebackIntent intent, WritebackAction action, bool allowPaste)
     {
+        if (intent == WritebackIntent.Read) return "阅读翻译不能修改来源。";
         if (_readOnly || !_completed || _snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
             return "当前结果没有有效的写作选区，请重新选择并翻译。";
         UpdateRisksAndDiff(); // 人工编辑后重新检查保护项。
+        var mode = _app.Settings.Writing.Writeback;
+        if (allowPaste && mode is "paste")
+            return PasteFlow(intent, action);
+        if (allowPaste && mode is "auto")
+        {
+            var (nativeError, attempted) = TryApplySnapshot(intent, action);
+            if (nativeError is null) return null;
+            if (attempted) return nativeError; // 已发送写入，状态不确定，禁止二次粘贴。
+            return PasteFlow(intent, action);
+        }
+        var (error, _) = TryApplySnapshot(intent, action);
+        return error;
+    }
+
+    private (string? Error, bool Attempted) TryApplySnapshot(WritebackIntent intent, WritebackAction action)
+    {
+        if (_snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
+            return ("当前结果没有有效的写作选区，请重新选择并翻译。", false);
         var error = NativeEditSelection.Apply(_snapshot, OutputText.Text, intent, action, _warnings,
             new WindowInteropHelper(this).Handle, out var attempted);
         // 已向控件发送写入时，即使超时或校验不确定，也禁止再次使用旧快照。
@@ -557,9 +564,41 @@ public partial class ToolWindow : Window, IDisposable
             _snapshot = null;
             UpdateActions();
         }
-        if (error is not null) return error;
+        if (error is not null) return (error, attempted);
         CommitLanguage(); // 只有确认完整写回后提交写作记忆。
         SetStatus(_warnings.Length == 0 ? "已完整写回原选区。" : "已完整写回原选区；" + string.Join("\n", _warnings));
+        return (null, attempted);
+    }
+
+    // 复制译文 + 回到目标窗口 + Ctrl+V。仅在用户明确触发写回时调用，永不抛异常。
+    private string? PasteFlow(WritebackIntent intent, WritebackAction action)
+    {
+        if (_snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
+            return "当前结果没有有效的写作选区，请重新选择并翻译。";
+        if (intent == WritebackIntent.Fast && _warnings.Count > 0)
+            return "译文存在风险，已保留原文。请主动打开工具查看并复制。";
+        var replacement = WritebackGate.Replacement(_snapshot, OutputText.Text, action);
+        if (string.IsNullOrWhiteSpace(replacement) || replacement.Length > 30_000 || replacement.Contains('\0'))
+            return "译文为空、过长或含无效字符，不能粘贴。";
+        var target = _snapshot.TopLevelWindow != 0 ? _snapshot.TopLevelWindow : _hotkeyForeground;
+        if (target == 0 || !IsWindow(target)) return "无有效目标窗口，已阻止粘贴。请回到目标窗口按 Alt+V。";
+        try
+        {
+            if (GetForegroundWindow() != target)
+            {
+                SetForegroundWindow(target);
+                Thread.Sleep(150);
+                if (GetForegroundWindow() != target) return "无法回到目标窗口，已阻止粘贴。请手动粘贴。";
+            }
+            if (!ClipboardReader.TrySetText(replacement)) return "剪贴板被占用，粘贴失败，请稍后重试。";
+            Thread.Sleep(60);
+            if (!PasteHelper.SendPaste()) return "已复制译文，自动粘贴失败，请手动按 Ctrl+V。";
+        }
+        catch { return "粘贴失败，不会崩溃。请手动按 Ctrl+V。"; }
+        _snapshot = null;
+        UpdateActions();
+        CommitLanguage();
+        SetStatus(_warnings.Count == 0 ? "已粘贴译文，请检查目标位置。" : "已粘贴译文，请检查目标位置；" + string.Join("\n", _warnings));
         return null;
     }
 
@@ -583,8 +622,10 @@ public partial class ToolWindow : Window, IDisposable
         if (_operation is null) return;
         _operations.TryPublish(_operation, () =>
         {
-            var error = Apply(WritebackIntent.Review, action);
-            if (error is not null) SetStatus(error);
+            // 主窗口按钮：焦点在主窗口，只做原生安全写回；粘贴模式请回目标窗口按 Alt+V。
+            var error = ApplyWriteback(WritebackIntent.Review, action, allowPaste: false);
+            if (error is not null)
+                SetStatus(_app.Settings.Writing.Writeback == "native" ? error : error + "\n当前为粘贴写回模式，可回到目标窗口按 Alt+V。");
         });
     }
 

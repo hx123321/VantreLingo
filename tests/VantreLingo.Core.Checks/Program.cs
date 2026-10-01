@@ -267,6 +267,13 @@ Add("首次默认审查，快速模式可保存并恢复", () =>
     var loaded = store.Load();
     Assert(loaded.Writing.Mode == "fast" && loaded.Capture.AutoCopyFallback);
 });
+Add("写回方式默认自动且只接受三种取值", () =>
+{
+    Assert(new AppSettings().Writing.Writeback == "auto");
+    new AppSettings { Writing = new() { Writeback = "native" } }.Validate();
+    new AppSettings { Writing = new() { Writeback = "paste" } }.Validate();
+    Throws<InvalidDataException>(() => new AppSettings { Writing = new() { Writeback = "clipboard" } }.Validate());
+});
 Add("阅读意图无论风险和目标状态都不能写回", () =>
     Assert(WritebackGate.Validate(snapshot, selection, WritebackIntent.Read, "Hello", []) is not null));
 Add("完整有效选区可进入快速写回", () =>

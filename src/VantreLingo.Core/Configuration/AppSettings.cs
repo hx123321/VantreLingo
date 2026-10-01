@@ -19,6 +19,7 @@ public sealed record AppSettings
         if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Capture is null ||
             FreeTranslation is null || Privacy is null || Ocr is null)
             throw new InvalidDataException("设置版本或结构不受支持，请保留原文件后手动修复。");
+        Writing.Validate();
         if (Language.Mode is not ("smart" or "fixed"))
             throw new InvalidDataException("不支持的语言模式。");
         LanguageRoutingService.ValidateCode(Language.FirstChineseTarget, allowChinese: false);
@@ -28,8 +29,6 @@ public sealed record AppSettings
             LanguageRoutingService.ValidateCode(Language.FixedTarget);
         if (Language.Mode == "fixed" && Language.FixedTarget is null)
             throw new InvalidDataException("固定模式必须设置目标语言。");
-        if (Writing.Mode is not ("review" or "fast"))
-            throw new InvalidDataException("写作模式必须为 review 或 fast。");
         FreeTranslation.Validate();
         if (Ocr.Language is not null) LanguageRoutingService.ValidateCode(Ocr.Language);
         if (Privacy.SaveTranslationHistory || Privacy.SaveCustomerContent || Privacy.Telemetry || Privacy.AutoUpdate)
@@ -49,6 +48,16 @@ public sealed record WritingSettings
 {
     public string Mode { get; init; } = "review";
     public string DefaultPreset { get; init; } = "customer-business";
+    // 原生安全写回 / 剪贴板粘贴 / 自动（原生优先，失败转粘贴）。
+    public string Writeback { get; init; } = "auto";
+
+    public void Validate()
+    {
+        if (Mode is not ("review" or "fast"))
+            throw new InvalidDataException("写作模式必须为 review 或 fast。");
+        if (Writeback is not ("native" or "paste" or "auto"))
+            throw new InvalidDataException("写回方式必须为 native、paste 或 auto。");
+    }
 }
 
 public sealed record CaptureSettings

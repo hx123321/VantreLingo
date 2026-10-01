@@ -64,15 +64,34 @@ public partial class App : Application
                 ContextMenu = CreateTrayMenu()
             };
             _tray.TrayMouseDoubleClick += (_, _) => ShowTool();
+            DispatcherUnhandledException += (_, e) =>
+            {
+                try
+                {
+                    LogCrash(e.Exception);
+                    _tool?.SetStatus("出现界面异常，已拦截未崩溃：" + e.Exception.GetType().Name + "。可继续使用，详情见 crash.log。");
+                    Notify("出现界面异常，已拦截未崩溃。");
+                    e.Handled = true;
+                }
+                catch { e.Handled = true; }
+            };
+            AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+            {
+                try { if (e.ExceptionObject is Exception ex) LogCrash(ex); } catch { }
+            };
+            TaskScheduler.UnobservedTaskException += (_, e) =>
+            {
+                try { LogCrash(e.Exception); e.SetObserved(); } catch { }
+            };
             _hotkeys = new HotkeyMapper(
-                () => _ = _tool.CaptureAndTranslateAsync(readOnly: true, useModel: false),
-                () => _ = _tool.CaptureAndTranslateAsync(readOnly: true, useModel: true),
-                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false, useModel: false),
-                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false, useModel: true),
-                () => _ = _tool.CaptureOcrAsync(),
-                () => _ = _tool.TranslateClipboardAsync(useModel: false),
-                () => _ = _tool.TranslateClipboardAsync(useModel: true),
-                () => _ = _tool.PasteTranslationAsync());
+                () => Fire(() => _tool?.CaptureAndTranslateAsync(readOnly: true, useModel: false)),
+                () => Fire(() => _tool?.CaptureAndTranslateAsync(readOnly: true, useModel: true)),
+                () => Fire(() => _tool?.CaptureAndTranslateAsync(readOnly: false, useModel: false)),
+                () => Fire(() => _tool?.CaptureAndTranslateAsync(readOnly: false, useModel: true)),
+                () => Fire(() => _tool?.CaptureOcrAsync()),
+                () => Fire(() => _tool?.TranslateClipboardAsync(useModel: false)),
+                () => Fire(() => _tool?.TranslateClipboardAsync(useModel: true)),
+                () => Fire(() => _tool?.PasteTranslationAsync()));
             _instance.Listen(() => Dispatcher.BeginInvoke(ShowTool));
             ShowTool();
             MigrateWriteHotkey();
@@ -169,6 +188,33 @@ public partial class App : Application
             if (_tray is null) return;
             _tray.IconSource = (ImageSource)FindResource(_hotkeysOn ? "AppIcon" : "AppIconGray");
             _tray.ToolTipText = _hotkeysOn ? "VantreLingo" : "VantreLingo（快捷键已暂停）";
+        }
+        catch { }
+    }
+
+    private static void Fire(Func<Task?> action)
+    {
+        try
+        {
+            var task = action();
+            if (task is not null)
+                task.ContinueWith(t => LogCrash(t.Exception?.InnerException ?? t.Exception ?? new Exception("后台任务失败。")),
+                    TaskContinuationOptions.OnlyOnFaulted);
+        }
+        catch (Exception ex) { LogCrash(ex); }
+    }
+
+    internal static void LogCrash(Exception exception)
+    {
+        // 只记录异常类型与消息，不记录任何原文、译文或剪贴板内容。
+        try
+        {
+            var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VantreLingo");
+            Directory.CreateDirectory(directory);
+            var message = exception.Message ?? "";
+            if (message.Length > 500) message = message[..500];
+            File.AppendAllText(Path.Combine(directory, "crash.log"),
+                $"{DateTimeOffset.UtcNow:O} {exception.GetType().FullName}: {message}{Environment.NewLine}");
         }
         catch { }
     }
