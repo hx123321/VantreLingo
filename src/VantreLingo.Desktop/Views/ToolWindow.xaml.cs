@@ -223,21 +223,53 @@ public partial class ToolWindow : Window, IDisposable
 
     internal async Task TranslateClipboardAsync()
     {
+        // Alt+C：复制并翻译。先模拟一次 Ctrl+C 取当前选区，600ms 内出现剪贴板
+        // 新内容就用它；否则回退到现有剪贴板文本；都没有则失败提示。全程不崩溃。
         try
         {
+            var fresh = await TryCopyAndReadAsync();
+            if (fresh is not null)
+            {
+                await TranslateClipboardWithTextAsync(fresh);
+                return;
+            }
             var text = ClipboardReader.TryGetText();
             if (text is null)
             {
                 var operation = BeginOperation();
-                _operations.TryPublish(operation, () => Report("剪贴板没有可用文本，已阻止翻译，不会崩溃。请先复制文本。", fast: false, armClipboardWatch: true));
+                _operations.TryPublish(operation, () => Report("没有取到新复制内容，剪贴板也没有可用文本。请先选中文本再按 Alt+C。", fast: false, armClipboardWatch: true));
                 return;
             }
             await TranslateClipboardWithTextAsync(text);
         }
         catch
         {
-            try { Report("剪贴板读取失败，不会崩溃。请重新复制后按 Alt+C。", fast: false, armClipboardWatch: true); } catch { }
+            try { Report("复制并翻译失败，不会崩溃。请重新选中后按 Alt+C。", fast: false, armClipboardWatch: true); } catch { }
         }
+    }
+
+    private static async Task<string?> TryCopyAndReadAsync()
+    {
+        try
+        {
+            string? beforeHash;
+            try { beforeHash = ClipboardReader.CurrentHash(); } catch { beforeHash = null; }
+            if (!PasteHelper.SendCopy()) return null;
+            var deadline = DateTimeOffset.UtcNow.AddMilliseconds(600);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                try { await Task.Delay(60); } catch { return null; }
+                string? text;
+                try { text = ClipboardReader.TryGetText(); } catch { return null; }
+                if (text is null) continue;
+                string hash;
+                try { hash = ClipboardText.Hash(text); } catch { continue; }
+                if (string.IsNullOrEmpty(hash) || hash == beforeHash) continue;
+                return text;
+            }
+            return null;
+        }
+        catch { return null; }
     }
 
     internal async Task TranslateClipboardWithTextAsync(string text)
@@ -391,17 +423,33 @@ public partial class ToolWindow : Window, IDisposable
                 SetResultStatus();
                 if (fast)
                 {
-                    // 所有权临界区内校验、一次写回和提交记忆；旧请求不能产生任何副作用。
-                    // 快速失败仍保持快速模式，不切换 Writing.Mode。
-                    var error = Apply(WritebackIntent.Fast, WritebackAction.Replace);
-                    if (error is not null)
+                    // 快速模式：只有目标为中文才尝试一次自动写回；非中文直接弹小窗，
+                    // 仍保持快速模式，不切换 Writing.Mode。所有权临界区内完成副作用。
+                    if (!LanguageRoutingService.IsChinese(result.TargetLanguage))
                     {
-                        IntentLabel.Text = "快速写回已阻止 · 可主动审查和复制";
-                        Report(error, fast: true, armClipboardWatch: true);
+                        IntentLabel.Text = "快速模式 · 非中文已保留原文";
+                        if (_warnings.Length == 0)
+                        {
+                            try { _app.MarkPresetTested(style); }
+                            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus("译文完成，但提示测试记录未能保存。"); }
+                        }
+                        CommitLanguage();
+                        EnsureMini().ShowSuccess(text, result.Translation, canReplace: true, isFast: false);
                     }
-                    else if (fromHotkey)
+                    else
                     {
-                        try { _mini?.HideMini(); } catch { }
+                        // 所有权临界区内校验、一次写回和提交记忆；旧请求不能产生任何副作用。
+                        // 快速失败仍保持快速模式，不切换 Writing.Mode。
+                        var error = Apply(WritebackIntent.Fast, WritebackAction.Replace);
+                        if (error is not null)
+                        {
+                            IntentLabel.Text = "快速写回已阻止 · 可主动审查和复制";
+                            Report(error, fast: true, armClipboardWatch: true);
+                        }
+                        else if (fromHotkey)
+                        {
+                            try { _mini?.HideMini(); } catch { }
+                        }
                     }
                 }
                 else

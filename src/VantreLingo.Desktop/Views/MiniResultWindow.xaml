@@ -18,7 +18,7 @@
       <WrapPanel>
         <Button x:Name="CopyButton" Content="复制" Click="Copy_Click" IsEnabled="False" />
         <Button x:Name="PasteButton" Content="粘贴 Alt+V" Click="Paste_Click" IsEnabled="False" />
-        <Button x:Name="ClipboardButton" Content="复制翻译 Alt+C" Click="Clipboard_Click" />
+        <Button x:Name="ClipboardButton" Content="复制并翻译 Alt+C" Click="Clipboard_Click" />
         <Button x:Name="MainButton" Content="主窗口" Click="Main_Click" />
         <Button x:Name="CloseButton" Content="关闭" Click="Close_Click" />
       </WrapPanel>

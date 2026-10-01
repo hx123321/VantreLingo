@@ -38,7 +38,7 @@
         <TextBlock Text="写作翻译（留空停用）" Margin="0,0,0,6" />
         <TextBox x:Name="WriteHotkeyText" Margin="0,0,0,12" />
         <TextBlock Text="截图取字（留空停用）"/><TextBox x:Name="OcrHotkeyText" Margin="0,4,0,12"/>
-        <TextBlock Text="复制翻译：读取剪贴板并翻译（默认 Alt+C，留空停用）"/><TextBox x:Name="ClipboardHotkeyText" Margin="0,4,0,12"/>
+        <TextBlock Text="复制并翻译：先模拟 Ctrl+C 取词再翻译（默认 Alt+C，留空停用）"/><TextBox x:Name="ClipboardHotkeyText" Margin="0,4,0,12"/>
         <TextBlock Text="粘贴译文：在小窗有译文时替换/粘贴（默认 Alt+V，留空停用）"/><TextBox x:Name="PasteHotkeyText" Margin="0,4,0,12"/>
         <CheckBox x:Name="AutoCopyCheck" Content="选区失败时自动模拟 Ctrl+C 取词（浏览器/VS Code 兼容，默认关闭）" Margin="0,0,0,6" />
         <TextBlock Text="自动取词只在快捷键触发后试一次，不监听剪贴板，不恢复剪贴板；剪贴板无新内容时仍提示失败，可再按 Alt+C 手动翻译。"

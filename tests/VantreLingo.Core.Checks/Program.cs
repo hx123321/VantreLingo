@@ -67,6 +67,11 @@ AddAsync("并发迟到结果不能覆盖最新请求", async () =>
     finally { foreach (var operation in operations) operation.Dispose(); }
 });
 Add("首次中文目标是英文", () => Assert(plan.TargetFor("zh-CN") == "en"));
+Add("中文目标判断覆盖简繁与大小写", () =>
+{
+    foreach (var code in new[] { "zh-CN", "zh-TW", "zh", "ZH-cn" }) Assert(LanguageRoutingService.IsChinese(code));
+    foreach (var code in new[] { "en", "ja", "de", "fr" }) Assert(!LanguageRoutingService.IsChinese(code));
+});
 Add("日文阅读后中文沿用日文目标", () =>
 {
     var japanese = new TranslationResult("你好", "ja", "zh-CN", true, []);

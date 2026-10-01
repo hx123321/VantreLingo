@@ -1,10 +1,14 @@
+using System.IO;
 using System.Windows;
+using System.Windows.Media.Imaging;
+using Microsoft.Win32;
 using VantreLingo.Desktop.Infrastructure;
 namespace VantreLingo.Desktop.Views;
 
 public partial class ToolWindow
 {
     private ScreenshotSelection? _screenshot;
+    private BitmapSource? _screenshotImage;
     private async void Ocr_Click(object sender, RoutedEventArgs e) => await CaptureOcrAsync();
     internal async Task CaptureOcrAsync()
     {
@@ -31,7 +35,9 @@ public partial class ToolWindow
                 try { InputText.Text = text; } finally { _settingInput = false; }
                 OutputText.IsReadOnly = false;
                 IntentLabel.Text = "截图取字 · 请先校对识别文本";
-                _app.ShowTool(); SetStatus("本地 OCR 完成。识别文本可编辑，再主动选择翻译或客户整理。截图没有保存或上传。");
+                _screenshotImage = image;
+                CopyImageButton.IsEnabled = SaveImageButton.IsEnabled = true;
+                _app.ShowTool(); SetStatus("本地 OCR 完成。识别文本可编辑，再主动选择翻译或客户整理。截图没有保存或上传，可用截图复制/另存。");
             });
         }
         catch (OperationCanceledException) { }
@@ -44,5 +50,36 @@ public partial class ToolWindow
             });
         }
         finally { _screenshot = null; _operations.TryPublish(operation, () => CancelButton.IsEnabled = false); }
+    }
+
+    private void CopyImage_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_screenshotImage is null) { SetStatus("没有可用截图，请先按 Alt+S 框选。"); return; }
+            Clipboard.SetImage(_screenshotImage);
+            SetStatus("截图已复制到剪贴板。");
+        }
+        catch (Exception ex) when (ex is System.Runtime.InteropServices.COMException or UnauthorizedAccessException or IOException)
+        { SetStatus("截图复制失败，剪贴板被占用，请稍后重试。"); }
+        catch { SetStatus("截图复制失败，请稍后重试。"); }
+    }
+
+    private void SaveImage_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (_screenshotImage is null) { SetStatus("没有可用截图，请先按 Alt+S 框选。"); return; }
+            var dialog = new SaveFileDialog { Filter = "PNG 图片|*.png", FileName = "screenshot.png" };
+            if (dialog.ShowDialog(this) != true) return;
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(_screenshotImage));
+            using var stream = File.OpenWrite(dialog.FileName);
+            encoder.Save(stream);
+            SetStatus("截图已按你的选择另存。");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        { SetStatus("截图另存失败，请检查文件权限。"); }
+        catch { SetStatus("截图另存失败，请检查文件权限。"); }
     }
 }

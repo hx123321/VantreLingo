@@ -55,6 +55,8 @@
     </Grid>
     <WrapPanel Grid.Row="3" Margin="0,16,0,12">
       <Button Content="截图取字" Click="Ocr_Click" />
+      <Button x:Name="CopyImageButton" Content="复制截图" Click="CopyImage_Click" IsEnabled="False" />
+      <Button x:Name="SaveImageButton" Content="另存截图" Click="SaveImage_Click" IsEnabled="False" />
       <Button Content="客户整理" Click="Inquiry_Click" />
       <Button Content="返回翻译" Click="TranslationView_Click" />
       <Button x:Name="InquiryMarkdownButton" Content="复制 Markdown" Click="InquiryMarkdown_Click" IsEnabled="False" />
