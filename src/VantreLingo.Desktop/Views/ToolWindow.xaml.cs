@@ -31,6 +31,8 @@ public partial class ToolWindow : Window, IDisposable
     private bool _refreshingStyles;
     private StylePreset? _requestStyle;
     private IReadOnlyList<GlossaryMatch> _matchedTerms = [];
+    private MiniResultWindow? _mini;
+    private bool _miniFailed;
 
     internal ToolWindow(App app, HttpClient http)
     {
@@ -124,21 +126,32 @@ public partial class ToolWindow : Window, IDisposable
 
     internal async Task CaptureAndTranslateAsync(bool readOnly)
     {
-        TranslationView();
-        var fast = !readOnly && _app.Settings.Writing.Mode == "fast";
-        var operation = BeginOperation();
-        _snapshot = null;
-        _readOnly = readOnly;
-        SetStatus("正在读取选区…");
         try
         {
-            var snapshot = await _capture.CaptureAsync(operation.Id, operation.Token);
+            TranslationView();
+            var fast = !readOnly && _app.Settings.Writing.Mode == "fast";
+            var operation = BeginOperation();
+            _snapshot = null;
+            _readOnly = readOnly;
+            _miniFailed = false;
+            SetStatus("正在读取选区…");
+            EnsureMini().ShowWorking("正在读取选区…");
+            SelectionSnapshot? snapshot = null;
+            try
+            {
+                snapshot = await _capture.CaptureAsync(operation.Id, operation.Token);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                snapshot = null;
+            }
             if (!_operations.TryPublish(operation, () =>
             {
-                if (!fast) _app.ShowTool();
+                // 快捷键路径不再直接打开主窗口，统一走小悬浮窗。
                 if (snapshot is null)
                 {
-                    Report("没有取得明确选区，或该控件不支持选区读取。请手动粘贴文本。", fast);
+                    Report("没有取得明确选区，已进入剪贴板兼容模式：复制文本后自动翻译，或按 Alt+C 翻译剪贴板。", fast, armClipboardWatch: true);
                     return;
                 }
                 _settingInput = true;
@@ -147,16 +160,152 @@ public partial class ToolWindow : Window, IDisposable
                 _snapshot = snapshot;
                 OutputText.IsReadOnly = readOnly;
                 IntentLabel.Text = readOnly ? "阅读翻译 · 只读" : fast ? "快速翻译" : "写作审查 · 检查后应用";
+                EnsureMini().ShowWorking(snapshot.OriginalText);
             }) || snapshot is null) return;
-            await TranslateAsync(operation, fast);
+            await TranslateAsync(operation, fast, fromHotkey: true);
         }
         catch (OperationCanceledException) { }
-        catch (Exception ex)
+        catch
         {
-            _operations.TryPublish(operation, () => Report(ex is TimeoutException
-                ? "选区读取超时，请手动粘贴文本。" : "无法读取选区，请手动粘贴文本。", fast));
+            // 获取不到文本也不能崩溃：统一走小窗失败提示。
+            try { Report("无法读取选区，请手动粘贴文本。", fast: false, armClipboardWatch: true); } catch { }
         }
-        finally { _operations.TryPublish(operation, () => CancelButton.IsEnabled = _completed); }
+        finally
+        {
+            try
+            {
+                var op = _operation;
+                if (op is not null) _operations.TryPublish(op, () => CancelButton.IsEnabled = _completed);
+            }
+            catch { }
+        }
+    }
+
+    internal async Task TranslateClipboardAsync()
+    {
+        try
+        {
+            var text = ClipboardReader.TryGetText();
+            if (text is null)
+            {
+                var operation = BeginOperation();
+                _operations.TryPublish(operation, () => Report("剪贴板没有可用文本，已阻止翻译，不会崩溃。请先复制文本。", fast: false, armClipboardWatch: true));
+                return;
+            }
+            await TranslateClipboardWithTextAsync(text);
+        }
+        catch
+        {
+            try { Report("剪贴板读取失败，不会崩溃。请重新复制后按 Alt+C。", fast: false, armClipboardWatch: true); } catch { }
+        }
+    }
+
+    internal async Task TranslateClipboardWithTextAsync(string text)
+    {
+        try
+        {
+            var safe = ClipboardText.Sanitize(text);
+            if (safe is null)
+            {
+                var noop = BeginOperation();
+                _operations.TryPublish(noop, () => Report("剪贴板没有可用文本，已阻止翻译。请先复制文本。", fast: false, armClipboardWatch: true));
+                return;
+            }
+            TranslationView();
+            // 快速模式失败后仍保持快速模式：这里不切换 Writing.Mode。
+            var fast = _app.Settings.Writing.Mode == "fast";
+            var operation = BeginOperation();
+            _miniFailed = false;
+            _readOnly = false;
+            var snapshot = new SelectionSnapshot(operation.Id, 0, 0, null, "Clipboard",
+                safe, SelectionSnapshot.Hash(safe), DateTimeOffset.UtcNow, null);
+            _operations.TryPublish(operation, () =>
+            {
+                _settingInput = true;
+                try { InputText.Text = safe; }
+                finally { _settingInput = false; }
+                _snapshot = snapshot;
+                OutputText.IsReadOnly = false;
+                IntentLabel.Text = fast ? "快速翻译 · 剪贴板兼容" : "剪贴板翻译 · 检查后应用";
+                EnsureMini().ShowWorking(safe);
+                SetStatus("正在翻译剪贴板…");
+            });
+            await TranslateAsync(operation, fast, fromHotkey: true);
+        }
+        catch (OperationCanceledException) { }
+        catch
+        {
+            try { Report("剪贴板翻译失败，不会崩溃。", fast: false, armClipboardWatch: true); } catch { }
+        }
+        finally
+        {
+            try
+            {
+                var op = _operation;
+                if (op is not null) _operations.TryPublish(op, () => CancelButton.IsEnabled = _completed);
+            }
+            catch { }
+        }
+    }
+
+    internal async Task PasteTranslationAsync()
+    {
+        try
+        {
+            Operation? operation = _operation;
+            if (operation is null || !_completed || _result is null || string.IsNullOrWhiteSpace(OutputText.Text))
+            {
+                EnsureMini().ShowStatusOnly("没有可用译文：请先用快捷键翻译，出现小窗译文后再按 Alt+V。");
+                return;
+            }
+            var translation = OutputText.Text;
+            string? error = null;
+            _operations.TryPublish(operation, () =>
+            {
+                // 有合法选区时走原生安全写回；剪贴板来源（无 Locator）走兼容粘贴。
+                if (_snapshot?.Locator is not null)
+                {
+                    error = Apply(WritebackIntent.Review, WritebackAction.Replace);
+                    if (error is null)
+                    {
+                        EnsureMini().ShowStatusOnly("已替换原选区。");
+                        SetStatus("已通过 Alt+V 替换原选区。");
+                    }
+                    else
+                    {
+                        EnsureMini().ShowFailure(error, armClipboardWatch: false);
+                        SetStatus(error);
+                    }
+                }
+                else
+                {
+                    try { _mini?.HideMini(); } catch { }
+                    var ok = PasteHelper.PasteText(translation);
+                    if (ok)
+                    {
+                        SetStatus("译文已放入剪贴板并发送粘贴，请检查目标位置。");
+                        CommitLanguage();
+                    }
+                    else
+                    {
+                        if (ClipboardReader.TrySetText(translation))
+                        {
+                            EnsureMini().ShowStatusOnly("已复制译文，自动粘贴失败，请手动按 Ctrl+V。");
+                            SetStatus("剪贴板已更新，自动粘贴失败，请手动粘贴。");
+                        }
+                        else
+                        {
+                            EnsureMini().ShowFailure("粘贴失败：剪贴板被占用，请稍后重试。", armClipboardWatch: false);
+                        }
+                    }
+                }
+            });
+            await Task.CompletedTask;
+        }
+        catch
+        {
+            try { EnsureMini().ShowStatusOnly("粘贴失败，不会崩溃。"); } catch { }
+        }
     }
 
     private async void Translate_Click(object sender, RoutedEventArgs e)
@@ -171,7 +320,7 @@ public partial class ToolWindow : Window, IDisposable
     private static string Code(ComboBox box) =>
         box.SelectedItem is LanguageChoice choice && box.Text == choice.Label ? choice.Code : box.Text.Trim();
 
-    private async Task TranslateAsync(Operation operation, bool fast)
+    private async Task TranslateAsync(Operation operation, bool fast, bool fromHotkey = false)
     {
         SetStatus("正在翻译…");
         try
@@ -196,17 +345,23 @@ public partial class ToolWindow : Window, IDisposable
                 _matchedTerms = glossary.Match(text, result.SourceLanguage, result.TargetLanguage, style.Contexts());
                 OutputText.Text = result.Translation;
                 _completed = true;
+                _miniFailed = false;
                 UpdateRisksAndDiff();
                 UpdateActions();
                 SetResultStatus();
                 if (fast)
                 {
                     // 所有权临界区内校验、一次写回和提交记忆；旧请求不能产生任何副作用。
+                    // 快速失败仍保持快速模式，不切换 Writing.Mode。
                     var error = Apply(WritebackIntent.Fast, WritebackAction.Replace);
                     if (error is not null)
                     {
                         IntentLabel.Text = "快速写回已阻止 · 可主动审查和复制";
-                        Report(error, fast: true);
+                        Report(error, fast: true, armClipboardWatch: true);
+                    }
+                    else if (fromHotkey)
+                    {
+                        try { _mini?.HideMini(); } catch { }
                     }
                 }
                 else
@@ -217,6 +372,11 @@ public partial class ToolWindow : Window, IDisposable
                         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { SetStatus("译文完成，但提示测试记录未能保存。"); }
                     }
                     if (_readOnly || _snapshot is null) CommitLanguage();
+                    if (fromHotkey)
+                    {
+                        var canReplace = true;
+                        EnsureMini().ShowSuccess(text, result.Translation, canReplace, isFast: false);
+                    }
                 }
             });
         }
@@ -232,7 +392,7 @@ public partial class ToolWindow : Window, IDisposable
                     : "无法连接 Provider，请检查网络和地址。",
                 _ => "翻译失败，请检查设置后重试。"
             };
-            _operations.TryPublish(operation, () => Report(message, fast));
+            _operations.TryPublish(operation, () => Report(message, fast, armClipboardWatch: fromHotkey));
         }
         finally { _operations.TryPublish(operation, () => CancelButton.IsEnabled = _completed); }
     }
@@ -311,18 +471,59 @@ public partial class ToolWindow : Window, IDisposable
         });
     }
 
-    private void Report(string message, bool fast)
+    private MiniResultWindow EnsureMini()
     {
-        SetStatus(message);
-        if (fast) _app.Notify(message); // 托盘气泡不激活工具窗口。
+        if (_mini is not null) return _mini;
+        var mini = new MiniResultWindow();
+        mini.CopyRequested = () =>
+        {
+            try
+            {
+                if (_operation is null || !_completed || string.IsNullOrWhiteSpace(OutputText.Text)) return;
+                if (ClipboardReader.TrySetText(OutputText.Text)) SetStatus("译文已复制。");
+                else mini.ShowStatusOnly("剪贴板暂时被占用，请稍后重试。");
+            }
+            catch { }
+        };
+        mini.PasteRequested = () => _ = PasteTranslationAsync();
+        mini.ClipboardRequested = () => _ = TranslateClipboardAsync();
+        mini.OpenMainRequested = () =>
+        {
+            try { _app.ShowTool(); } catch { }
+        };
+        mini.ClipboardDetected += text =>
+        {
+            try
+            {
+                if (!_miniFailed || !(mini.IsVisible)) return;
+                _ = TranslateClipboardWithTextAsync(text);
+            }
+            catch { }
+        };
+        _mini = mini;
+        return mini;
+    }
+
+    private void Report(string message, bool fast, bool armClipboardWatch = false)
+    {
+        try
+        {
+            SetStatus(message);
+            _miniFailed = true;
+            EnsureMini().ShowFailure(message, armClipboardWatch);
+            if (fast) _app.Notify(message); // 托盘气泡不激活工具窗口，快速模式保持不变。
+        }
+        catch { }
     }
 
     private void Cancel_Click(object sender, RoutedEventArgs e) => Cancel();
     private void Cancel()
     {
-        _operations.Cancel();
+        try { _operations.Cancel(); } catch { }
         _completed = false;
         _snapshot = null;
+        _miniFailed = false;
+        try { _mini?.HideMini(); } catch { }
         ResetInquiry();
         CopyButton.IsEnabled = ReplaceButton.IsEnabled = AppendButton.IsEnabled = CancelButton.IsEnabled = false;
         SetStatus("已取消。输入或调整语言后可重新翻译。");
@@ -334,8 +535,12 @@ public partial class ToolWindow : Window, IDisposable
         if (_operation is null || !CopyButton.IsEnabled || string.IsNullOrWhiteSpace(OutputText.Text)) return;
         _operations.TryPublish(_operation, () =>
         {
-            try { Clipboard.SetText(OutputText.Text); SetStatus("译文已复制。"); }
-            catch (COMException) { SetStatus("剪贴板暂时被占用，请稍后重试。"); }
+            try
+            {
+                if (ClipboardReader.TrySetText(OutputText.Text)) SetStatus("译文已复制。");
+                else SetStatus("剪贴板暂时被占用，请稍后重试。");
+            }
+            catch { SetStatus("剪贴板暂时被占用，请稍后重试。"); }
         });
     }
 
@@ -343,14 +548,14 @@ public partial class ToolWindow : Window, IDisposable
     {
         if (_app.IsExiting) return;
         e.Cancel = true;
-        Cancel();
-        Hide();
+        try { Cancel(); Hide(); _mini?.HideMini(); } catch { Hide(); }
     }
 
     public void Dispose()
     {
-        _operations.Dispose();
-        _operation?.Dispose();
+        try { _operations.Dispose(); } catch { }
+        try { _operation?.Dispose(); } catch { }
+        try { _mini?.Close(); } catch { }
     }
     private sealed record LanguageChoice(string Code, string Label);
 }

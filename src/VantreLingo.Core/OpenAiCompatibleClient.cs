@@ -26,6 +26,8 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
         using var message = new HttpRequestMessage(HttpMethod.Post, provider.ChatCompletionsUri());
         if (!string.IsNullOrWhiteSpace(apiKey))
             message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+        foreach (var (key, value) in provider.ExtraHeaders)
+            message.Headers.TryAddWithoutValidation(key, value);
         var payload = new Dictionary<string, object>
         {
             ["model"] = provider.Model, ["stream"] = false,
@@ -34,8 +36,9 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
                 new { role = "system", content = systemPrompt },
                 new { role = "user", content = JsonSerializer.Serialize(new { source_text = text }) }
             },
-            ["response_format"] = new { type = "json_object" }
         };
+        if (provider.UseResponseFormat)
+            payload["response_format"] = new { type = "json_object" };
         if (provider.Temperature is { } temperature) payload["temperature"] = temperature;
         if (provider.MaxOutputTokens is { } maxTokens) payload["max_tokens"] = maxTokens;
         message.Content = JsonContent.Create(payload);
@@ -58,12 +61,22 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
                 buffer.Write(block, 0, length);
             }
             using var document = JsonDocument.Parse(buffer.ToArray());
-            var choice = document.RootElement.GetProperty("choices")[0];
-            if (choice.GetProperty("finish_reason").GetString() != "stop")
+            if (!document.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
+                throw new InvalidDataException("Provider 未返回约定的完整 JSON 结果。");
+            var choice = choices[0];
+            // 兼容 opencode / Go 自建网关：finish_reason 可能为 stop、end_turn 或缺省（null）。
+            // length、content_filter、tool_calls 等仍视为截断，拒绝使用。
+            string? finishReason = null;
+            if (choice.TryGetProperty("finish_reason", out var finishElement) && finishElement.ValueKind != JsonValueKind.Null)
+                finishReason = finishElement.GetString();
+            if (finishReason is not null && !finishReason.Equals("stop", StringComparison.OrdinalIgnoreCase) &&
+                !finishReason.Equals("end_turn", StringComparison.OrdinalIgnoreCase))
                 throw new InvalidDataException("Provider 结果未完整结束，无法使用截断或工具调用结果。");
-            var content = choice
-                .GetProperty("message").GetProperty("content").GetString();
-            if (content is null) throw new InvalidDataException("Provider 返回空内容。");
+            if (!choice.TryGetProperty("message", out var messageElement) ||
+                !messageElement.TryGetProperty("content", out var contentElement))
+                throw new InvalidDataException("Provider 未返回约定的完整 JSON 结果。");
+            var content = ExtractMessageContent(contentElement);
+            if (string.IsNullOrEmpty(content)) throw new InvalidDataException("Provider 返回空内容。");
             cancellationToken.ThrowIfCancellationRequested();
             return content;
         }
@@ -75,5 +88,39 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
         {
             throw new InvalidDataException("Provider 未返回约定的完整 JSON 结果。");
         }
+    }
+
+    internal static string? ExtractMessageContent(JsonElement content)
+    {
+        // 标准为 string；部分 Go 网关返回 content 数组（文本块）。
+        if (content.ValueKind == JsonValueKind.String) return content.GetString();
+        if (content.ValueKind == JsonValueKind.Null || content.ValueKind == JsonValueKind.Undefined) return null;
+        if (content.ValueKind != JsonValueKind.Array) return null;
+        var parts = new List<string>();
+        foreach (var item in content.EnumerateArray())
+        {
+            if (item.ValueKind == JsonValueKind.String)
+            {
+                if (item.GetString() is { } s && s.Length > 0) parts.Add(s);
+            }
+            else if (item.ValueKind == JsonValueKind.Object)
+            {
+                if (item.TryGetProperty("text", out var textElement))
+                {
+                    if (textElement.ValueKind == JsonValueKind.String)
+                    {
+                        if (textElement.GetString() is { } s && s.Length > 0) parts.Add(s);
+                    }
+                    else if (textElement.ValueKind == JsonValueKind.Object &&
+                        textElement.TryGetProperty("value", out var nested) &&
+                        nested.ValueKind == JsonValueKind.String &&
+                        nested.GetString() is { } nestedText && nestedText.Length > 0)
+                    {
+                        parts.Add(nestedText);
+                    }
+                }
+            }
+        }
+        return parts.Count == 0 ? null : string.Concat(parts);
     }
 }

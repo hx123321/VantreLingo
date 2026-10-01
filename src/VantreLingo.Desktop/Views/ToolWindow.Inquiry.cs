@@ -107,11 +107,16 @@ public partial class ToolWindow
             {
                 var report = EditedReport();
                 var text = json ? JsonSerializer.Serialize(report, JsonFormat.Options) : InquiryService.Markdown(report);
-                if (copy) { Clipboard.SetText(text); SetStatus("当前人工审查结果已复制。"); }
+                if (copy)
+                {
+                    if (ClipboardReader.TrySetText(text)) SetStatus("当前人工审查结果已复制。");
+                    else SetStatus("导出失败，请检查剪贴板占用。");
+                }
                 else { File.WriteAllText(path!, text); SetStatus("已按你的选择另存当前整理结果。"); }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.COMException or InvalidDataException)
             { SetStatus(ex is InvalidDataException ? ex.Message : "导出失败，请检查文件权限或剪贴板占用。"); }
+            catch { SetStatus("导出失败，请检查文件权限或剪贴板占用。"); }
         });
     }
     private sealed class FieldRow(string name, InquiryField original)

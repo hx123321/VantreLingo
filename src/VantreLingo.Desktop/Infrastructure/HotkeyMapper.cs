@@ -10,9 +10,9 @@ using VantreLingo.Core.Configuration;
 
 namespace VantreLingo.Desktop.Infrastructure;
 
-internal sealed class HotkeyMapper(Action read, Action review, Action ocr) : IDisposable
+internal sealed class HotkeyMapper(Action read, Action review, Action ocr, Action clipboard, Action paste) : IDisposable
 {
-    private HotkeySettings _current = new() { ReadTranslate = "", WriteTranslate = "", ScreenshotOcr = "" };
+    private HotkeySettings _current = new() { ReadTranslate = "", WriteTranslate = "", ScreenshotOcr = "", ClipboardTranslate = "", PasteTranslation = "" };
 
     public bool TryApply(HotkeySettings settings, out string error)
     {
@@ -44,8 +44,10 @@ internal sealed class HotkeyMapper(Action read, Action review, Action ocr) : IDi
         var read = Parse(settings.ReadTranslate);
         var write = Parse(settings.WriteTranslate);
         var screenshot = Parse(settings.ScreenshotOcr);
-        if (new[] { read, write, screenshot }.OfType<HotkeyModel>().GroupBy(h => h).Any(g => g.Count() > 1))
-            throw new InvalidDataException("阅读、写作和截图热键不能相同。");
+        var clipboard = Parse(settings.ClipboardTranslate);
+        var paste = Parse(settings.PasteTranslation);
+        if (new[] { read, write, screenshot, clipboard, paste }.OfType<HotkeyModel>().GroupBy(h => h).Any(g => g.Count() > 1))
+            throw new InvalidDataException("阅读、写作、截图、复制翻译和粘贴热键不能相同。");
     }
 
     private static HotkeyModel? Parse(string text)
@@ -63,6 +65,8 @@ internal sealed class HotkeyMapper(Action read, Action review, Action ocr) : IDi
         Add("VantreLingo.Read", settings.ReadTranslate, read);
         Add("VantreLingo.Review", settings.WriteTranslate, review);
         Add("VantreLingo.Ocr", settings.ScreenshotOcr, ocr);
+        Add("VantreLingo.Clipboard", settings.ClipboardTranslate, clipboard);
+        Add("VantreLingo.Paste", settings.PasteTranslation, paste);
     }
 
     private static void Add(string id, string text, Action action)
@@ -80,6 +84,8 @@ internal sealed class HotkeyMapper(Action read, Action review, Action ocr) : IDi
         HotkeyManager.Current.Remove("VantreLingo.Read");
         HotkeyManager.Current.Remove("VantreLingo.Review");
         HotkeyManager.Current.Remove("VantreLingo.Ocr");
+        HotkeyManager.Current.Remove("VantreLingo.Clipboard");
+        HotkeyManager.Current.Remove("VantreLingo.Paste");
     }
 
     public void Dispose() => Remove();

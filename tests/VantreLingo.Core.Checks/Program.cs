@@ -540,6 +540,59 @@ Add("自定义专业方向可用，修改后撤销快速授权", () =>
     Throws<InvalidDataException>(() => new StylePreset { CustomDomain = "Unapproved free text" }.Validate());
 });
 
+Add("剪贴板清洗永不崩溃且拒绝无效文本", () =>
+{
+    Assert(ClipboardText.Sanitize(null) is null);
+    Assert(ClipboardText.Sanitize("   ") is null);
+    Assert(ClipboardText.Sanitize("") is null);
+    Assert(ClipboardText.Sanitize("hello\0world") is null);
+    Assert(ClipboardText.Sanitize(new string('a', 30_001)) is null);
+    Assert(ClipboardText.Sanitize("  你好  ") == "你好");
+    Assert(!string.IsNullOrEmpty(ClipboardText.Hash("你好")));
+});
+
+Add("自定义请求头校验并拒绝系统头", () =>
+{
+    new ProviderProfile { ExtraHeaders = new() { ["x-api-key"] = "abc", ["X-Title"] = "VantreLingo" } }.Validate(false);
+    Throws<InvalidDataException>(() => new ProviderProfile { ExtraHeaders = new() { ["Authorization"] = "x" } }.Validate(false));
+    Throws<InvalidDataException>(() => new ProviderProfile { ExtraHeaders = new() { ["bad header"] = "x" } }.Validate(false));
+    Throws<InvalidDataException>(() => new ProviderProfile { ExtraHeaders = new() { ["x-ok"] = "" } }.Validate(false));
+});
+
+AddAsync("兼容网关透传 x-头并可关闭 json_object", async () =>
+{
+    string? seenHeader = null;
+    bool hasFormat = true;
+    using var http = new HttpClient(new StubHandler(async (message, token) =>
+    {
+        seenHeader = message.Headers.Contains("x-api-key") ? string.Join(",", message.Headers.GetValues("x-api-key")) : null;
+        using var payload = JsonDocument.Parse(await message.Content!.ReadAsStringAsync(token));
+        hasFormat = payload.RootElement.TryGetProperty("response_format", out _);
+        var inner = "{\"translation\":\"Hello\",\"source_language\":\"zh-CN\",\"target_language\":\"en\",\"source_confident\":true,\"warnings\":[]}";
+        return JsonResponse(new { choices = new[] { new { finish_reason = "stop", message = new { content = inner } } } });
+    }));
+    var client = new OpenAiCompatibleClient(http,
+        new() { Model = "test-model", UseResponseFormat = false, ExtraHeaders = new() { ["x-api-key"] = "key-123" } }, null);
+    Assert((await client.TranslateAsync(new("你好", plan), CancellationToken.None)).Translation == "Hello");
+    Assert(seenHeader == "key-123");
+    Assert(!hasFormat);
+});
+
+AddAsync("兼容 content 数组与 end_turn 或缺省结束原因", async () =>
+{
+    async Task<string> TranslateWith(object choice)
+    {
+        using var http = new HttpClient(new StubHandler((_, _) => Task.FromResult(JsonResponse(new { choices = new[] { choice } }))));
+        return (await new OpenAiCompatibleClient(http, new() { Model = "m" }, null)
+            .TranslateAsync(new("你好", plan), CancellationToken.None)).Translation;
+    }
+    var inner = "{\"translation\":\"Hello\",\"source_language\":\"zh-CN\",\"target_language\":\"en\",\"source_confident\":true,\"warnings\":[]}";
+    Assert(await TranslateWith(new { finish_reason = "end_turn", message = new { content = inner } }) == "Hello");
+    Assert(await TranslateWith(new { finish_reason = (string?)null, message = new { content = inner } }) == "Hello");
+    var arrayContent = new { finish_reason = "stop", message = new { content = new object[] { new { type = "text", text = inner[..20] }, new { type = "text", text = inner[20..] } } } };
+    Assert(await TranslateWith(arrayContent) == "Hello");
+});
+
 var failures = 0;
 try
 {

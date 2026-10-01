@@ -52,6 +52,8 @@ public sealed record HotkeySettings
     public string ReadTranslate { get; init; } = "Alt+D";
     public string WriteTranslate { get; init; } = "Ctrl+Alt+G";
     public string ScreenshotOcr { get; init; } = "Alt+S";
+    public string ClipboardTranslate { get; init; } = "Alt+C";
+    public string PasteTranslation { get; init; } = "Alt+V";
 }
 
 public sealed record OcrSettings
@@ -97,6 +99,8 @@ public sealed record ProviderProfile
     public int TimeoutSeconds { get; init; } = 60;
     public double? Temperature { get; init; }
     public int? MaxOutputTokens { get; init; }
+    public bool UseResponseFormat { get; init; } = true;
+    public Dictionary<string, string> ExtraHeaders { get; init; } = new();
 
     // 密钥是 DPAPI CurrentUser 加密后的 Base64，普通设置导出必须排除此字段。
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -113,6 +117,26 @@ public sealed record ProviderProfile
             throw new InvalidDataException("请先在设置中填写模型名称。");
         if (Model is null || Model.Length > 200 || Model.Any(char.IsControl))
             throw new InvalidDataException("模型名称无效。");
+        ValidateExtraHeaders();
+    }
+
+    public void ValidateExtraHeaders()
+    {
+        if (ExtraHeaders is null) throw new InvalidDataException("自定义请求头无效。");
+        if (ExtraHeaders.Count > 16) throw new InvalidDataException("自定义请求头最多 16 个。");
+        foreach (var (key, value) in ExtraHeaders)
+        {
+            if (string.IsNullOrWhiteSpace(key) || key.Length > 64 || value is null || value.Length == 0 || value.Length > 2000)
+                throw new InvalidDataException("自定义请求头名称或值无效。");
+            foreach (var ch in key)
+                if (!(ch is '-' || (ch >= 'A' && ch <= 'Z') || (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')))
+                    throw new InvalidDataException($"自定义请求头名称无效：{key}。");
+            if (value.Any(char.IsControl))
+                throw new InvalidDataException($"自定义请求头值无效：{key}。");
+            var lower = key.ToLowerInvariant();
+            if (lower is "authorization" or "content-type" or "content-length" or "host" or "content-encoding" or "transfer-encoding")
+                throw new InvalidDataException($"自定义请求头不能覆盖系统头：{key}。");
+        }
     }
 
     public Uri ChatCompletionsUri()

@@ -8,6 +8,21 @@
       "endpoint": "https://api.openai.com/v1/",
       "model": "",
       "timeout_seconds": 60,
+      "use_response_format": true,
+      "extra_headers": {},
+      "encrypted_api_key": null
+    },
+    {
+      "id": "opencode-go-example",
+      "name": "opencode Go 网关示例（未启用）",
+      "endpoint": "http://localhost:8000/v1/",
+      "model": "",
+      "timeout_seconds": 60,
+      "use_response_format": false,
+      "extra_headers": {
+        "x-api-key": "填网关密钥或留空删除本行",
+        "x-title": "VantreLingo"
+      },
       "encrypted_api_key": null
     }
   ]

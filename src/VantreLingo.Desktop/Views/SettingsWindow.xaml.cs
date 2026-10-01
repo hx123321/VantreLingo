@@ -21,7 +21,9 @@ public partial class SettingsWindow : Window
         _app = app; _draft = app.Providers;
         InitializeComponent(); RefreshProviders(_draft.SelectedProviderId);
         ReadHotkeyText.Text = app.Settings.Hotkeys.ReadTranslate; WriteHotkeyText.Text = app.Settings.Hotkeys.WriteTranslate;
-        OcrHotkeyText.Text = app.Settings.Hotkeys.ScreenshotOcr; WritingMode.SelectedValue = app.Settings.Writing.Mode;
+        OcrHotkeyText.Text = app.Settings.Hotkeys.ScreenshotOcr;
+        ClipboardHotkeyText.Text = app.Settings.Hotkeys.ClipboardTranslate; PasteHotkeyText.Text = app.Settings.Hotkeys.PasteTranslation;
+        WritingMode.SelectedValue = app.Settings.Writing.Mode;
         LanguageMode.SelectedValue = app.Settings.Language.Mode; FixedTargetText.Text = app.Settings.Language.FixedTarget ?? "";
         var languages = new List<OcrChoice> { new(null, "自动：系统首选 OCR 语言") };
         try { languages.AddRange(OcrService.InstalledLanguages().Select(l => new OcrChoice(l.LanguageTag, l.DisplayName + " · " + l.LanguageTag))); }
@@ -44,7 +46,25 @@ public partial class SettingsWindow : Window
         TimeoutText.Text = p.TimeoutSeconds.ToString(CultureInfo.InvariantCulture);
         TemperatureText.Text = p.Temperature?.ToString(CultureInfo.InvariantCulture) ?? "";
         MaxOutputText.Text = p.MaxOutputTokens?.ToString(CultureInfo.InvariantCulture) ?? "";
+        JsonModeCheck.IsChecked = p.UseResponseFormat;
+        HeadersText.Text = string.Join("\n", p.ExtraHeaders.Select(kv => $"{kv.Key}: {kv.Value}"));
         ApiKeyText.Clear(); RemoveKeyCheck.IsChecked = false;
+    }
+    private static Dictionary<string, string> ParseHeaders(string text)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var raw in text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0) continue;
+            var index = line.IndexOf(':');
+            if (index <= 0) throw new InvalidDataException("自定义请求头格式为每行 Name: Value。");
+            var key = line[..index].Trim();
+            var value = line[(index + 1)..].Trim();
+            if (key.Length == 0 || value.Length == 0) throw new InvalidDataException("自定义请求头名称或值不能为空。");
+            result[key] = value;
+        }
+        return result;
     }
     private void SaveDraft()
     {
@@ -55,7 +75,8 @@ public partial class SettingsWindow : Window
         if (!string.IsNullOrWhiteSpace(MaxOutputText.Text)) maxOutput = int.TryParse(MaxOutputText.Text, out var max) ? max : throw new InvalidDataException("输出上限必须为整数。");
         if (RemoveKeyCheck.IsChecked == true && ApiKeyText.Password.Length > 0) throw new InvalidDataException("请在填写新密钥和清除密钥之间选择一种操作。");
         var p = _editing with { Name = ProviderName.Text.Trim(), Endpoint = EndpointText.Text.Trim(), Model = ModelText.Text.Trim(), TimeoutSeconds = timeout,
-            Temperature = temperature, MaxOutputTokens = maxOutput,
+            Temperature = temperature, MaxOutputTokens = maxOutput, UseResponseFormat = JsonModeCheck.IsChecked != false,
+            ExtraHeaders = ParseHeaders(HeadersText.Text ?? ""),
             EncryptedApiKey = RemoveKeyCheck.IsChecked == true ? null : ApiKeyText.Password.Length > 0 ? DpapiSecretStore.Encrypt(ApiKeyText.Password) : _editing.EncryptedApiKey };
         p.Validate(requireConfigured: false);
         _draft = _draft with { Providers = _draft.Providers.Select(x => x.Id == p.Id ? p : x).ToList() }; _editing = p;
@@ -88,7 +109,8 @@ public partial class SettingsWindow : Window
         var settings = _app.Settings with
         {
             Writing = _app.Settings.Writing with { Mode = WritingMode.SelectedValue as string ?? "review" },
-            Hotkeys = new() { ReadTranslate = ReadHotkeyText.Text.Trim(), WriteTranslate = WriteHotkeyText.Text.Trim(), ScreenshotOcr = OcrHotkeyText.Text.Trim() },
+            Hotkeys = new() { ReadTranslate = ReadHotkeyText.Text.Trim(), WriteTranslate = WriteHotkeyText.Text.Trim(), ScreenshotOcr = OcrHotkeyText.Text.Trim(),
+                ClipboardTranslate = ClipboardHotkeyText.Text.Trim(), PasteTranslation = PasteHotkeyText.Text.Trim() },
             Ocr = new() { Language = (OcrLanguage.SelectedItem as OcrChoice)?.Code },
             Language = _app.Settings.Language with { Mode = LanguageMode.SelectedValue as string ?? "smart",
                 FixedTarget = string.IsNullOrWhiteSpace(FixedTargetText.Text) ? null : FixedTargetText.Text.Trim(),

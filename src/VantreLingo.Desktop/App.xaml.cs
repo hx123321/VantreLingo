@@ -64,7 +64,9 @@ public partial class App : Application
             _tray.TrayMouseDoubleClick += (_, _) => ShowTool();
             _hotkeys = new HotkeyMapper(() => _ = _tool.CaptureAndTranslateAsync(readOnly: true),
                 () => _ = _tool.CaptureAndTranslateAsync(readOnly: false),
-                () => _ = _tool.CaptureOcrAsync());
+                () => _ = _tool.CaptureOcrAsync(),
+                () => _ = _tool.TranslateClipboardAsync(),
+                () => _ = _tool.PasteTranslationAsync());
             _instance.Listen(() => Dispatcher.BeginInvoke(ShowTool));
             ShowTool();
             if (!_hotkeys.TryApply(Settings.Hotkeys, out var error))
