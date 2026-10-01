@@ -73,7 +73,6 @@ internal sealed class CaptureService
                     text = sels[0].GetText(30_001);
                 }
                 catch { return new(null, CaptureReason.UiaSelection); }
-                catch { return new(null, CaptureReason.UiaSelection); }
                 token.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(text) || text.Length > 30_000)
                     return new(null, CaptureReason.UiaEmpty);
