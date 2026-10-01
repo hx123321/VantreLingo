@@ -35,7 +35,7 @@ public static class FreeTranslators
         }
     }
 
-    internal static IEnumerable<string> Chunk(string text)
+    public static IEnumerable<string> Chunk(string text)
     {
         var i = 0;
         while (i < text.Length)
