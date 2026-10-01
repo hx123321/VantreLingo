@@ -142,7 +142,8 @@ Add("损坏或未知版本的配置保持原样", () =>
 Add("不落盘正文、历史或遥测设置", () =>
 {
     var json = JsonSerializer.Serialize(new AppSettings(), JsonFormat.Options);
-    Assert(!json.Contains("original_text") && !json.Contains("translation\""));
+    // 快捷键名 paste_translation 含有 translation 子串，需带前引号精确匹配正文字段。
+    Assert(!json.Contains("original_text") && !json.Contains("\"translation\":"));
     Throws<InvalidDataException>(() => new AppSettings { Privacy = new() { Telemetry = true } }.Validate());
     new AppSettings { Writing = new() { Mode = "fast" } }.Validate();
     Throws<InvalidDataException>(() => new AppSettings { Writing = new() { Mode = "automatic" } }.Validate());
