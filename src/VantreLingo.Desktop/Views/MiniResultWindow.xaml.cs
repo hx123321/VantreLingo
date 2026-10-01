@@ -137,8 +137,8 @@ public partial class MiniResultWindow : Window
         {
             if (!GetCursorPos(out var pt)) return;
             var area = SystemParameters.WorkArea;
-            var left = pt.X + 16;
-            var top = pt.Y + 20;
+            double left = pt.X + 16;
+            double top = pt.Y + 20;
             if (left + Width > area.Right) left = area.Right - Width - 8;
             if (top + 260 > area.Bottom) top = area.Bottom - 270;
             if (left < area.Left) left = area.Left + 8;
