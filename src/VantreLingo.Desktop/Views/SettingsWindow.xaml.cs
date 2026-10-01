@@ -24,6 +24,7 @@ public partial class SettingsWindow : Window
         OcrHotkeyText.Text = app.Settings.Hotkeys.ScreenshotOcr;
         ClipboardHotkeyText.Text = app.Settings.Hotkeys.ClipboardTranslate; PasteHotkeyText.Text = app.Settings.Hotkeys.PasteTranslation;
         AutoCopyCheck.IsChecked = app.Settings.Capture.AutoCopyFallback;
+        FreeEngine.SelectedValue = app.Settings.FreeTranslation.Engine;
         WritingMode.SelectedValue = app.Settings.Writing.Mode;
         LanguageMode.SelectedValue = app.Settings.Language.Mode; FixedTargetText.Text = app.Settings.Language.FixedTarget ?? "";
         var languages = new List<OcrChoice> { new(null, "自动：系统首选 OCR 语言") };
@@ -113,6 +114,7 @@ public partial class SettingsWindow : Window
             Hotkeys = new() { ReadTranslate = ReadHotkeyText.Text.Trim(), WriteTranslate = WriteHotkeyText.Text.Trim(), ScreenshotOcr = OcrHotkeyText.Text.Trim(),
                 ClipboardTranslate = ClipboardHotkeyText.Text.Trim(), PasteTranslation = PasteHotkeyText.Text.Trim() },
             Capture = new() { AutoCopyFallback = AutoCopyCheck.IsChecked == true },
+            FreeTranslation = new() { Engine = FreeEngine.SelectedValue as string ?? "google" },
             Ocr = new() { Language = (OcrLanguage.SelectedItem as OcrChoice)?.Code },
             Language = _app.Settings.Language with { Mode = LanguageMode.SelectedValue as string ?? "smart",
                 FixedTarget = string.IsNullOrWhiteSpace(FixedTargetText.Text) ? null : FixedTargetText.Text.Trim(),

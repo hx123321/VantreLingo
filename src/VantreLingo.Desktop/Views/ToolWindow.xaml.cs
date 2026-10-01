@@ -33,6 +33,7 @@ public partial class ToolWindow : Window, IDisposable
     private IReadOnlyList<GlossaryMatch> _matchedTerms = [];
     private MiniResultWindow? _mini;
     private bool _miniFailed;
+    private bool _lastUseModel;
 
     internal ToolWindow(App app, HttpClient http)
     {
@@ -124,7 +125,7 @@ public partial class ToolWindow : Window, IDisposable
         CopyButton.IsEnabled = ReplaceButton.IsEnabled = AppendButton.IsEnabled = false;
     }
 
-    internal async Task CaptureAndTranslateAsync(bool readOnly)
+    internal async Task CaptureAndTranslateAsync(bool readOnly, bool useModel = false)
     {
         try
         {
@@ -134,6 +135,7 @@ public partial class ToolWindow : Window, IDisposable
             _snapshot = null;
             _readOnly = readOnly;
             _miniFailed = false;
+            _lastUseModel = useModel;
             SetStatus("正在读取选区…");
             EnsureMini().ShowWorking("正在读取选区…");
             CaptureOutcome outcome;
@@ -171,7 +173,7 @@ public partial class ToolWindow : Window, IDisposable
                 IntentLabel.Text = readOnly ? "阅读翻译 · 只读" : fast ? "快速翻译" : "写作审查 · 检查后应用";
                 EnsureMini().ShowWorking(snapshot.OriginalText);
             }) || snapshot is null) return;
-            await TranslateAsync(operation, fast, fromHotkey: true);
+            await TranslateAsync(operation, fast, fromHotkey: true, useModel: useModel);
         }
         catch (OperationCanceledException) { }
         catch
@@ -221,7 +223,7 @@ public partial class ToolWindow : Window, IDisposable
         catch { return null; }
     }
 
-    internal async Task TranslateClipboardAsync()
+    internal async Task TranslateClipboardAsync(bool useModel = false)
     {
         // Alt+C：复制并翻译。先模拟一次 Ctrl+C 取当前选区，600ms 内出现剪贴板
         // 新内容就用它；否则回退到现有剪贴板文本；都没有则失败提示。全程不崩溃。
@@ -272,7 +274,7 @@ public partial class ToolWindow : Window, IDisposable
         catch { return null; }
     }
 
-    internal async Task TranslateClipboardWithTextAsync(string text)
+    internal async Task TranslateClipboardWithTextAsync(string text, bool useModel = false)
     {
         try
         {
@@ -288,6 +290,7 @@ public partial class ToolWindow : Window, IDisposable
             var fast = _app.Settings.Writing.Mode == "fast";
             var operation = BeginOperation();
             _miniFailed = false;
+            _lastUseModel = useModel;
             _readOnly = false;
             var snapshot = new SelectionSnapshot(operation.Id, 0, 0, null, "Clipboard",
                 safe, SelectionSnapshot.Hash(safe), DateTimeOffset.UtcNow, null);
@@ -302,7 +305,7 @@ public partial class ToolWindow : Window, IDisposable
                 EnsureMini().ShowWorking(safe);
                 SetStatus("正在翻译剪贴板…");
             });
-            await TranslateAsync(operation, fast, fromHotkey: true);
+            await TranslateAsync(operation, fast, fromHotkey: true, useModel: useModel);
         }
         catch (OperationCanceledException) { }
         catch
@@ -385,14 +388,15 @@ public partial class ToolWindow : Window, IDisposable
         TranslationView();
         var operation = BeginOperation();
         if (_snapshot is not null) _snapshot = _snapshot with { OperationId = operation.Id };
-        // 浮窗内重试始终先审查，不能从浮窗自动写回。
-        await TranslateAsync(operation, fast: false);
+        // 主窗口按钮：按住 Ctrl 点击走模型，否则走免费接口；浮窗内重试始终先审查。
+        var useModel = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
+        await TranslateAsync(operation, fast: false, useModel: useModel);
     }
 
     private static string Code(ComboBox box) =>
         box.SelectedItem is LanguageChoice choice && box.Text == choice.Label ? choice.Code : box.Text.Trim();
 
-    private async Task TranslateAsync(Operation operation, bool fast, bool fromHotkey = false)
+    private async Task TranslateAsync(Operation operation, bool fast, bool fromHotkey = false, bool useModel = false)
     {
         SetStatus("正在翻译…");
         try
@@ -408,17 +412,28 @@ public partial class ToolWindow : Window, IDisposable
             var direct = DirectTranslation.TryTranslate(text, languages, glossary);
             TranslationResult result;
             bool isDirect;
+            bool isFree = false;
+            string freeName = "";
             if (direct is not null)
             {
                 result = direct;
                 isDirect = true;
             }
-            else
+            else if (useModel)
             {
                 var provider = _app.Providers.Selected;
                 var client = new OpenAiCompatibleClient(_http, provider, DpapiSecretStore.Decrypt(provider.EncryptedApiKey));
                 result = await client.TranslateAsync(new TranslationRequest(text, languages, style, glossary), operation.Token);
                 isDirect = false;
+            }
+            else
+            {
+                var engine = _app.Settings.FreeTranslation.Engine;
+                freeName = engine == "microsoft" ? "微软" : "谷歌";
+                result = await FreeTranslators.TranslateAsync(_http, engine, text, languages,
+                    _app.Providers.Selected.TimeoutSeconds, operation.Token);
+                isDirect = false;
+                isFree = true;
             }
             _operations.TryPublish(operation, () =>
             {
@@ -434,6 +449,7 @@ public partial class ToolWindow : Window, IDisposable
                 UpdateActions();
                 SetResultStatus();
                 if (isDirect) SetStatus(StatusText.Text + "\n本地术语直译，未调用模型。");
+                else if (isFree) SetStatus(StatusText.Text + $"\n免费接口（{freeName}）翻译，重要内容请按 Ctrl 走模型复核。");
                 if (fast)
                 {
                     // 快速模式：只有目标为中文才尝试一次自动写回；非中文直接弹小窗，
@@ -587,7 +603,7 @@ public partial class ToolWindow : Window, IDisposable
             catch { }
         };
         mini.PasteRequested = () => _ = PasteTranslationAsync();
-        mini.ClipboardRequested = () => _ = TranslateClipboardAsync();
+        mini.ClipboardRequested = () => _ = TranslateClipboardAsync(useModel: false);
         mini.OpenMainRequested = () =>
         {
             try { _app.ShowTool(); } catch { }
@@ -597,7 +613,7 @@ public partial class ToolWindow : Window, IDisposable
             try
             {
                 if (!_miniFailed || !(mini.IsVisible)) return;
-                _ = TranslateClipboardWithTextAsync(text);
+                _ = TranslateClipboardWithTextAsync(text, _lastUseModel);
             }
             catch { }
         };

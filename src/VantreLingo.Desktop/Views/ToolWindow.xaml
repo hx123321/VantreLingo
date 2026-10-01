@@ -62,7 +62,7 @@
       <Button x:Name="InquiryMarkdownButton" Content="复制 Markdown" Click="InquiryMarkdown_Click" IsEnabled="False" />
       <Button x:Name="InquiryJsonButton" Content="复制 JSON" Click="InquiryJson_Click" IsEnabled="False" />
       <Button x:Name="SaveInquiryButton" Content="另存整理" Click="SaveInquiry_Click" IsEnabled="False" />
-      <Button x:Name="TranslateButton" Content="翻译" Click="Translate_Click" IsDefault="False" />
+      <Button x:Name="TranslateButton" Content="翻译" Click="Translate_Click" IsDefault="False" ToolTip="直接点击走免费接口，按住 Ctrl 点击走模型" />
       <Button x:Name="CancelButton" Content="取消" Click="Cancel_Click" IsEnabled="False" />
       <Button x:Name="CopyButton" Content="复制译文" Click="Copy_Click" IsEnabled="False" />
       <Button x:Name="ReplaceButton" Content="替换选区" Click="Replace_Click" IsEnabled="False" />

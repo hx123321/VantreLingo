@@ -32,6 +32,7 @@
         <TextBlock Text="最大输出 tokens（可选，256–65536）"/><TextBox x:Name="MaxOutputText" Margin="0,4,0,12"/>
         <CheckBox x:Name="JsonModeCheck" Content="使用 response_format: json_object（opencode / Go 自建网关不支持时取消勾选）" Margin="0,0,0,6" />
         <TextBlock Text="自定义请求头（可选，每行一个 Name: Value；常用于 x-api-key / x-title 等透传）"/><TextBox x:Name="HeadersText" AcceptsReturn="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MinHeight="60" Margin="0,4,0,12"/>
+        <TextBlock Text="免费翻译引擎（默认热键走免费，同一热键另加 Ctrl 走模型）"/><ComboBox x:Name="FreeEngine" SelectedValuePath="Tag" Margin="0,4,0,12"><ComboBoxItem Content="谷歌免费接口" Tag="google"/><ComboBoxItem Content="微软免费接口" Tag="microsoft"/></ComboBox>
         <TextBlock Text="快捷键" FontSize="20" FontWeight="SemiBold" Margin="0,0,0,12" />
         <TextBlock Text="阅读翻译（留空停用）" Margin="0,0,0,6" />
         <TextBox x:Name="ReadHotkeyText" Margin="0,0,0,12" />
@@ -40,6 +41,8 @@
         <TextBlock Text="截图取字（留空停用）"/><TextBox x:Name="OcrHotkeyText" Margin="0,4,0,12"/>
         <TextBlock Text="复制并翻译：先模拟 Ctrl+C 取词再翻译（默认 Alt+C，留空停用）"/><TextBox x:Name="ClipboardHotkeyText" Margin="0,4,0,12"/>
         <TextBlock Text="粘贴译文：在小窗有译文时替换/粘贴（默认 Alt+V，留空停用）"/><TextBox x:Name="PasteHotkeyText" Margin="0,4,0,12"/>
+        <TextBlock Text="不带 Ctrl 的阅读/写作/复制热键走免费接口；按住 Ctrl 再按同一热键走模型（如 Alt+G 免费，Ctrl+Alt+G 走模型）。已含 Ctrl 的热键只走模型。全局热键总开关在托盘菜单，关闭时图标变灰。"
+                   TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12"/>
         <CheckBox x:Name="AutoCopyCheck" Content="选区失败时自动模拟 Ctrl+C 取词（浏览器/VS Code 兼容，默认关闭）" Margin="0,0,0,6" />
         <TextBlock Text="自动取词只在快捷键触发后试一次，不监听剪贴板，不恢复剪贴板；剪贴板无新内容时仍提示失败，可再按 Alt+C 手动翻译。"
                    TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12" />

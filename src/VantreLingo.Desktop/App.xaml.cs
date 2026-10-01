@@ -16,6 +16,8 @@ public partial class App : Application
     private SingleInstance? _instance;
     private TaskbarIcon? _tray;
     private HotkeyMapper? _hotkeys;
+    private MenuItem? _hotkeyToggle;
+    private bool _hotkeysOn = true;
     private ToolWindow? _tool;
     private SettingsWindow? _settingsWindow;
     private HttpClient? _http;
@@ -62,15 +64,25 @@ public partial class App : Application
                 ContextMenu = CreateTrayMenu()
             };
             _tray.TrayMouseDoubleClick += (_, _) => ShowTool();
-            _hotkeys = new HotkeyMapper(() => _ = _tool.CaptureAndTranslateAsync(readOnly: true),
-                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false),
+            _hotkeys = new HotkeyMapper(
+                () => _ = _tool.CaptureAndTranslateAsync(readOnly: true, useModel: false),
+                () => _ = _tool.CaptureAndTranslateAsync(readOnly: true, useModel: true),
+                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false, useModel: false),
+                () => _ = _tool.CaptureAndTranslateAsync(readOnly: false, useModel: true),
                 () => _ = _tool.CaptureOcrAsync(),
-                () => _ = _tool.TranslateClipboardAsync(),
+                () => _ = _tool.TranslateClipboardAsync(useModel: false),
+                () => _ = _tool.TranslateClipboardAsync(useModel: true),
                 () => _ = _tool.PasteTranslationAsync());
             _instance.Listen(() => Dispatcher.BeginInvoke(ShowTool));
             ShowTool();
-            if (!_hotkeys.TryApply(Settings.Hotkeys, out var error))
-                _tool.SetStatus(error);
+            MigrateWriteHotkey();
+            _hotkeysOn = Settings.Hotkeys.Enabled;
+            if (_hotkeysOn)
+            {
+                if (!_hotkeys.TryApply(Settings.Hotkeys, out var error))
+                    _tool.SetStatus(error);
+            }
+            RefreshTrayIcon();
         }
         catch (Exception ex) when (ex is InvalidDataException or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
@@ -83,6 +95,10 @@ public partial class App : Application
     private ContextMenu CreateTrayMenu()
     {
         var menu = new ContextMenu();
+        _hotkeyToggle = new MenuItem { Header = "启用全局快捷键", IsCheckable = true, IsChecked = _hotkeysOn };
+        _hotkeyToggle.Click += (_, _) => ToggleHotkeys();
+        menu.Items.Add(_hotkeyToggle);
+        menu.Items.Add(new Separator());
         Add("输入翻译", ShowTool);
         Add("截图取字", () => { if (_tool is not null) _ = _tool.CaptureOcrAsync(); });
         Add("客户整理", () => { ShowTool(); _tool?.PrepareInquiry(); });
@@ -106,6 +122,55 @@ public partial class App : Application
         _tool.Show();
         if (_tool.WindowState == WindowState.Minimized) _tool.WindowState = WindowState.Normal;
         _tool.Activate();
+    }
+
+    private void MigrateWriteHotkey()
+    {
+        // 旧默认 Ctrl+Alt+G 迁移为 Alt+G（+Ctrl 自动走模型）。
+        if (Settings.Hotkeys.WriteTranslate != "Ctrl+Alt+G") return;
+        var migrated = Settings with { Hotkeys = Settings.Hotkeys with { WriteTranslate = "Alt+G" } };
+        try { SettingsStore.Save(migrated); Settings = migrated; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+    }
+
+    private void ToggleHotkeys()
+    {
+        try
+        {
+            if (_hotkeysOn)
+            {
+                _hotkeys?.Suspend();
+                _hotkeysOn = false;
+            }
+            else
+            {
+                if (_hotkeys is null || _tool is null) return;
+                if (!_hotkeys.TryApply(Settings.Hotkeys, out var error))
+                {
+                    Notify("热键启用失败：" + error);
+                    if (_hotkeyToggle is not null) _hotkeyToggle.IsChecked = false;
+                    return;
+                }
+                _hotkeysOn = true;
+            }
+            if (_hotkeyToggle is not null) _hotkeyToggle.IsChecked = _hotkeysOn;
+            var updated = Settings with { Hotkeys = Settings.Hotkeys with { Enabled = _hotkeysOn } };
+            try { SettingsStore.Save(updated); Settings = updated; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            RefreshTrayIcon();
+        }
+        catch { }
+    }
+
+    private void RefreshTrayIcon()
+    {
+        try
+        {
+            if (_tray is null) return;
+            _tray.IconSource = (ImageSource)FindResource(_hotkeysOn ? "AppIcon" : "AppIconGray");
+            _tray.ToolTipText = _hotkeysOn ? "VantreLingo" : "VantreLingo（快捷键已暂停）";
+        }
+        catch { }
     }
 
     internal void Notify(string text) => _tray?.ShowBalloonTip("VantreLingo", text, BalloonIcon.Info);
@@ -153,18 +218,20 @@ public partial class App : Application
         settings.Validate();
         providers.Validate();
         HotkeyMapper.Validate(settings.Hotkeys);
-        if (!_hotkeys!.TryApply(settings.Hotkeys, out error)) return false;
+        // 总开关关闭时只校验不注册，保持暂停状态。
+        if (_hotkeysOn && !_hotkeys!.TryApply(settings.Hotkeys, out error)) return false;
+        error = "";
         try
         {
             _providerStore.Save(providers);
-            SettingsStore.Save(settings);
+            SettingsStore.Save(settings with { Hotkeys = settings.Hotkeys with { Enabled = _hotkeysOn } });
         }
         catch
         {
-            _hotkeys.TryApply(Settings.Hotkeys, out _);
+            if (_hotkeysOn) _hotkeys!.TryApply(Settings.Hotkeys, out _);
             throw;
         }
-        Settings = settings;
+        Settings = settings with { Hotkeys = settings.Hotkeys with { Enabled = _hotkeysOn } };
         Providers = providers;
         _tool?.ConfigurationChanged();
         return true;

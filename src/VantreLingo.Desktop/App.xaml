@@ -11,6 +11,14 @@
         </DrawingGroup>
       </DrawingImage.Drawing>
     </DrawingImage>
+    <DrawingImage x:Key="AppIconGray">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#9AA0A6" Geometry="M 0,0 L 32,0 32,32 0,32 Z" />
+          <GeometryDrawing Brush="White" Geometry="M 6,7 L 11,7 16,22 21,7 26,7 18,27 14,27 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
     <Style TargetType="Window">
       <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI" />
       <Setter Property="FontSize" Value="14" />

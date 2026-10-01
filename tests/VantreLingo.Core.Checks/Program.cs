@@ -411,6 +411,71 @@ Add("术语最长短语优先并遵守语言和上下文", () =>
     Assert(glossary.Match("气垫梳", "zh-CN", "en", ["software"]).Count == 0);
     Assert(glossary.Candidates("气垫梳", LanguageRoutingService.Plan("auto", "ja", new()), ["product"]).Count == 0);
 });
+Add("免费引擎未知名称与超长直接拒绝", () =>
+{
+    Throws<InvalidDataException>(() => new AppSettings { FreeTranslation = new() { Engine = "bogus" } }.Validate());
+    new AppSettings { FreeTranslation = new() { Engine = "microsoft" } }.Validate();
+});
+AddAsync("谷歌免费接口解析译文与检测语言", async () =>
+{
+    var calls = 0;
+    using var http = new HttpClient(new StubHandler((message, _) =>
+    {
+        calls++;
+        Assert(message.Method == HttpMethod.Get && message.RequestUri!.Host.Contains("translate.google.com"));
+        Assert(message.RequestUri!.Query.Contains("tl=zh-CN"));
+        var body = JsonSerializer.Serialize(new object?[] { new object?[] { new object?[] { "你好", "Hello", null, null, 3 } }, null, "en" });
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }));
+    var result = await FreeTranslators.TranslateAsync(http, "google", "Hello",
+        LanguageRoutingService.Plan("auto", null, new()), 60, CancellationToken.None);
+    Assert(result.Translation == "你好" && result.SourceLanguage == "en" && result.TargetLanguage == "zh-CN");
+    Assert(calls == 1);
+});
+AddAsync("谷歌智能中文走第二次调用译英文", async () =>
+{
+    var targets = new List<string>();
+    using var http = new HttpClient(new StubHandler((message, _) =>
+    {
+        var query = message.RequestUri!.Query;
+        var target = query.Contains("tl=en") ? "en" : "zh-CN";
+        targets.Add(target);
+        var text = target == "en" ? "Hello" : "你好";
+        var body = JsonSerializer.Serialize(new object?[] { new object?[] { new object?[] { text, "你好", null, null, 3 } }, null, "zh-CN" });
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }));
+    var result = await FreeTranslators.TranslateAsync(http, "google", "你好",
+        LanguageRoutingService.Plan("auto", null, new()), 60, CancellationToken.None);
+    Assert(result.Translation == "Hello" && result.TargetLanguage == "en");
+    Assert(targets.Count == 2 && targets[0] == "zh-CN" && targets[1] == "en");
+});
+AddAsync("微软免费接口鉴权后翻译并归一化中文", async () =>
+{
+    var kinds = new List<string>();
+    using var http = new HttpClient(new StubHandler((message, _) =>
+    {
+        if (message.Method == HttpMethod.Get)
+        {
+            kinds.Add("auth");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("plain-token") });
+        }
+        kinds.Add("translate");
+        Assert(message.Headers.Authorization?.Parameter == "plain-token");
+        Assert(message.RequestUri!.Query.Contains("to=en"));
+        var body = "[{\"detectedLanguage\":{\"language\":\"zh-Hans\",\"score\":1},\"translations\":[{\"text\":\"Hello\",\"to\":\"en\"}]}]";
+        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body, Encoding.UTF8, "application/json") });
+    }));
+    var result = await FreeTranslators.TranslateAsync(http, "microsoft", "你好",
+        LanguageRoutingService.Plan("zh-CN", "en", new()), 60, CancellationToken.None);
+    Assert(result.Translation == "Hello" && result.SourceLanguage == "zh-CN" && result.TargetLanguage == "en");
+    Assert(kinds.Count == 2 && kinds[0] == "auth" && kinds[1] == "translate");
+});
+Add("免费分块按上限切分且可还原", () =>
+{
+    var text = new string('a', 2500);
+    var chunks = FreeTranslators.Chunk(text).ToArray();
+    Assert(chunks.Length == 3 && chunks.All(c => c.Length <= 1000) && string.Concat(chunks) == text);
+});
 Add("本地直译命中 active 词条时不调用模型", () =>
 {
     var glossary = new GlossaryCatalog { Terms = [

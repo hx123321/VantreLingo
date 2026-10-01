@@ -10,12 +10,14 @@ public sealed record AppSettings
     public WritingSettings Writing { get; init; } = new();
     public HotkeySettings Hotkeys { get; init; } = new();
     public CaptureSettings Capture { get; init; } = new();
+    public FreeTranslationSettings FreeTranslation { get; init; } = new();
     public PrivacySettings Privacy { get; init; } = new();
     public OcrSettings Ocr { get; init; } = new();
 
     public void Validate()
     {
-        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Capture is null || Privacy is null || Ocr is null)
+        if (SchemaVersion != 1 || Language is null || Writing is null || Hotkeys is null || Capture is null ||
+            FreeTranslation is null || Privacy is null || Ocr is null)
             throw new InvalidDataException("设置版本或结构不受支持，请保留原文件后手动修复。");
         if (Language.Mode is not ("smart" or "fixed"))
             throw new InvalidDataException("不支持的语言模式。");
@@ -28,6 +30,7 @@ public sealed record AppSettings
             throw new InvalidDataException("固定模式必须设置目标语言。");
         if (Writing.Mode is not ("review" or "fast"))
             throw new InvalidDataException("写作模式必须为 review 或 fast。");
+        FreeTranslation.Validate();
         if (Ocr.Language is not null) LanguageRoutingService.ValidateCode(Ocr.Language);
         if (Privacy.SaveTranslationHistory || Privacy.SaveCustomerContent || Privacy.Telemetry || Privacy.AutoUpdate)
             throw new InvalidDataException("当前版本不支持历史、遥测或自动更新。");
@@ -58,10 +61,24 @@ public sealed record CaptureSettings
 public sealed record HotkeySettings
 {
     public string ReadTranslate { get; init; } = "Alt+D";
-    public string WriteTranslate { get; init; } = "Ctrl+Alt+G";
+    public string WriteTranslate { get; init; } = "Alt+G";
     public string ScreenshotOcr { get; init; } = "Alt+S";
     public string ClipboardTranslate { get; init; } = "Alt+C";
     public string PasteTranslation { get; init; } = "Alt+V";
+    // 托盘总开关：关闭后注销全部全局热键，托盘图标变灰。
+    public bool Enabled { get; init; } = true;
+}
+
+public sealed record FreeTranslationSettings
+{
+    // 默认热键走免费接口的引擎：google 或 microsoft。
+    public string Engine { get; init; } = "google";
+
+    public void Validate()
+    {
+        if (Engine is not ("google" or "microsoft"))
+            throw new InvalidDataException("免费翻译引擎必须为 google 或 microsoft。");
+    }
 }
 
 public sealed record OcrSettings

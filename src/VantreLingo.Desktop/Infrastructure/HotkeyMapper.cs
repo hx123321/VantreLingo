@@ -1,6 +1,7 @@
 // 从固定 STranslate Helpers/HotkeyMapper.cs 传统热键注册分支裁剪派生。
 // Copyright © 2022 zggsong. MIT 许可证见 licenses/STranslate.MIT.txt。
 // 移除 ChefKeys、低级键鼠钩子、按住键、Ctrl+CC、Ioc、正文日志及后台重试。
+// 阅读/写作/复制翻译支持双路由：不带 Ctrl 走免费接口，同键另加 Ctrl 走模型。
 using System.ComponentModel;
 using System.IO;
 using System.Windows.Input;
@@ -10,7 +11,9 @@ using VantreLingo.Core.Configuration;
 
 namespace VantreLingo.Desktop.Infrastructure;
 
-internal sealed class HotkeyMapper(Action read, Action review, Action ocr, Action clipboard, Action paste) : IDisposable
+internal sealed class HotkeyMapper(
+    Action readFree, Action readModel, Action reviewFree, Action reviewModel,
+    Action ocr, Action clipFree, Action clipModel, Action paste) : IDisposable
 {
     private HotkeySettings _current = new() { ReadTranslate = "", WriteTranslate = "", ScreenshotOcr = "", ClipboardTranslate = "", PasteTranslation = "" };
 
@@ -39,15 +42,29 @@ internal sealed class HotkeyMapper(Action read, Action review, Action ocr, Actio
         }
     }
 
+    public void Suspend()
+    {
+        try { Remove(); }
+        catch { }
+    }
+
     public static void Validate(HotkeySettings settings)
     {
-        var read = Parse(settings.ReadTranslate);
-        var write = Parse(settings.WriteTranslate);
-        var screenshot = Parse(settings.ScreenshotOcr);
-        var clipboard = Parse(settings.ClipboardTranslate);
-        var paste = Parse(settings.PasteTranslation);
-        if (new[] { read, write, screenshot, clipboard, paste }.OfType<HotkeyModel>().GroupBy(h => h).Any(g => g.Count() > 1))
-            throw new InvalidDataException("阅读、写作、截图、复制翻译和粘贴热键不能相同。");
+        var models = new List<HotkeyModel?>();
+        foreach (var text in new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ScreenshotOcr, settings.ClipboardTranslate, settings.PasteTranslation })
+            models.Add(Parse(text));
+        // 双路由展开：阅读/写作/复制翻译各可再带一个 +Ctrl 走模型版本。
+        var effective = new List<HotkeyModel>();
+        foreach (var text in new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ClipboardTranslate })
+        {
+            var (free, model) = Split(text);
+            if (free is { } f) effective.Add(f);
+            if (model is { } m) effective.Add(m);
+        }
+        foreach (var parsed in models.OfType<HotkeyModel>())
+            if (!effective.Contains(parsed)) effective.Add(parsed);
+        if (effective.GroupBy(h => h).Any(g => g.Count() > 1))
+            throw new InvalidDataException("热键不能相同（含自动派生的 +Ctrl 走模型版本）。");
     }
 
     private static HotkeyModel? Parse(string text)
@@ -60,19 +77,33 @@ internal sealed class HotkeyMapper(Action read, Action review, Action ocr, Actio
         return model;
     }
 
-    private void Register(HotkeySettings settings)
+    // 不带 Ctrl 的热键拆为免费版 +Ctrl 走模型版；本身已带 Ctrl 的只走模型。
+    private static (HotkeyModel? Free, HotkeyModel? Model) Split(string text)
     {
-        Add("VantreLingo.Read", settings.ReadTranslate, read);
-        Add("VantreLingo.Review", settings.WriteTranslate, review);
-        Add("VantreLingo.Ocr", settings.ScreenshotOcr, ocr);
-        Add("VantreLingo.Clipboard", settings.ClipboardTranslate, clipboard);
-        Add("VantreLingo.Paste", settings.PasteTranslation, paste);
+        if (Parse(text) is not { } baseKey) return (null, null);
+        if (baseKey.ModifierKeys.HasFlag(ModifierKeys.Control)) return (null, baseKey);
+        return (baseKey, baseKey with { Ctrl = true });
     }
 
-    private static void Add(string id, string text, Action action)
+    private void Register(HotkeySettings settings)
     {
-        if (Parse(text) is not { } hotkey) return;
-        HotkeyManager.Current.AddOrReplace(id, hotkey.CharKey, hotkey.ModifierKeys, (_, e) =>
+        var (readF, readM) = Split(settings.ReadTranslate);
+        var (reviewF, reviewM) = Split(settings.WriteTranslate);
+        var (clipF, clipM) = Split(settings.ClipboardTranslate);
+        Add("VantreLingo.Read", readF, readFree);
+        Add("VantreLingo.ReadModel", readM, readModel);
+        Add("VantreLingo.Review", reviewF, reviewFree);
+        Add("VantreLingo.ReviewModel", reviewM, reviewModel);
+        Add("VantreLingo.Ocr", Parse(settings.ScreenshotOcr), ocr);
+        Add("VantreLingo.Clipboard", clipF, clipFree);
+        Add("VantreLingo.ClipboardModel", clipM, clipModel);
+        Add("VantreLingo.Paste", Parse(settings.PasteTranslation), paste);
+    }
+
+    private static void Add(string id, HotkeyModel? hotkey, Action action)
+    {
+        if (hotkey is not { } key) return;
+        HotkeyManager.Current.AddOrReplace(id, key.CharKey, key.ModifierKeys, (_, e) =>
         {
             e.Handled = true;
             action();
@@ -81,11 +112,9 @@ internal sealed class HotkeyMapper(Action read, Action review, Action ocr, Actio
 
     private static void Remove()
     {
-        HotkeyManager.Current.Remove("VantreLingo.Read");
-        HotkeyManager.Current.Remove("VantreLingo.Review");
-        HotkeyManager.Current.Remove("VantreLingo.Ocr");
-        HotkeyManager.Current.Remove("VantreLingo.Clipboard");
-        HotkeyManager.Current.Remove("VantreLingo.Paste");
+        foreach (var id in new[] { "VantreLingo.Read", "VantreLingo.ReadModel", "VantreLingo.Review",
+            "VantreLingo.ReviewModel", "VantreLingo.Ocr", "VantreLingo.Clipboard", "VantreLingo.ClipboardModel", "VantreLingo.Paste" })
+            HotkeyManager.Current.Remove(id);
     }
 
     public void Dispose() => Remove();
