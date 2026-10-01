@@ -1,0 +1,39 @@
+<UserControl x:Class="VantreLingo.Desktop.Views.LibraryEditor" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+<DockPanel Margin="20">
+ <TextBlock DockPanel.Dock="Bottom" x:Name="StatusText" TextWrapping="Wrap" Foreground="#A04431" Margin="0,10,0,0" />
+ <TabControl>
+  <TabItem Header="翻译风格"><DockPanel Margin="12">
+   <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,12"><ComboBox x:Name="PresetList" Width="230" DisplayMemberPath="Name" SelectionChanged="Preset_Changed" /><Button Content="新建" Click="NewPreset_Click" /><Button Content="删除" Click="DeletePreset_Click" /><Button Content="导入" Click="ImportPresets_Click" /><Button Content="导出" Click="ExportPresets_Click" /></WrapPanel>
+   <WrapPanel DockPanel.Dock="Bottom"><Button Content="保存" Click="SavePreset_Click" /><Button Content="授权当前提示用于快速模式" Click="Approve_Click" /></WrapPanel>
+   <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="名称" /><TextBox x:Name="PresetName" Margin="0,4,0,12" />
+    <TextBlock Text="场景" /><ComboBox x:Name="Scene" Margin="0,4,0,12" SelectionChanged="Scene_Changed" />
+    <TextBlock Text="专业方向" /><ComboBox x:Name="Domain" Margin="0,4,0,12" />
+    <TextBlock Text="自定义专业方向名称（专业为自定义时填写）"/><TextBox x:Name="CustomDomain" MaxLength="100" Margin="0,4,0,12"/>
+    <TextBlock Text="语气" /><ComboBox x:Name="Tone" Margin="0,4,0,12" />
+    <TextBlock Text="性格 / 表达方式" /><ComboBox x:Name="Persona" Margin="0,4,0,12" />
+    <TextBlock Text="篇幅" /><ComboBox x:Name="Length" Margin="0,4,0,12" />
+    <TextBlock Text="忠实度（正式文件锁定严格忠实）" /><ComboBox x:Name="Fidelity" Margin="0,4,0,12" />
+    <TextBlock Text="自定义补充提示（默认仅审查；保存后需成功测试再授权）" /><TextBox x:Name="CustomPrompt" AcceptsReturn="True" TextWrapping="Wrap" Height="100" MaxLength="10000" Margin="0,4,0,12" />
+    <TextBlock Text="授权步骤：保存 → 选择该风格完成一次无风险审查翻译 → 返回此处明确授权。修改任一配置后授权失效。规则只处理已定义冲突，不能证明任意自由提示词无矛盾或模型无幻觉。" TextWrapping="Wrap" Foreground="#647085" Margin="0,0,0,12" />
+   </StackPanel></ScrollViewer>
+  </DockPanel></TabItem>
+  <TabItem Header="本地术语"><DockPanel Margin="12">
+   <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,12"><ComboBox x:Name="TermList" Width="260" DisplayMemberPath="Source" SelectionChanged="Term_Changed" /><Button Content="新建" Click="NewTerm_Click" /><Button Content="删除" Click="DeleteTerm_Click" /><Button Content="导入" Click="ImportTerms_Click" /><Button Content="导出" Click="ExportTerms_Click" /></WrapPanel>
+   <Button DockPanel.Dock="Bottom" Content="保存词条" Click="SaveTerm_Click" HorizontalAlignment="Left" />
+   <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="状态（草稿不参与翻译；禁用旧词后才能激活冲突新词）" /><ComboBox x:Name="TermStatus" Margin="0,4,0,12" />
+    <TextBlock Text="源语言代码" /><TextBox x:Name="TermSourceLanguage" Margin="0,4,0,12" />
+    <TextBlock Text="目标语言代码" /><TextBox x:Name="TermTargetLanguage" Margin="0,4,0,12" />
+    <TextBlock Text="方向" /><ComboBox x:Name="TermDirection" Margin="0,4,0,12" />
+    <TextBlock Text="原词" /><TextBox x:Name="TermSource" MaxLength="200" Margin="0,4,0,12" />
+    <TextBlock Text="译词" /><TextBox x:Name="TermTarget" MaxLength="200" Margin="0,4,0,12" />
+    <TextBlock Text="上下文（逗号分隔场景/专业代码；留空为全部）" /><TextBox x:Name="TermContexts" Margin="0,4,0,12" />
+    <TextBlock Text="允许变体（每行一个）" /><TextBox x:Name="AllowedVariants" AcceptsReturn="True" Height="65" Margin="0,4,0,12" />
+    <TextBlock Text="禁用变体（每行一个）" /><TextBox x:Name="ForbiddenVariants" AcceptsReturn="True" Height="65" Margin="0,4,0,12" />
+    <TextBlock Text="备注" /><TextBox x:Name="TermNotes" MaxLength="2000" Margin="0,4,0,12" />
+   </StackPanel></ScrollViewer>
+  </DockPanel></TabItem>
+ </TabControl>
+</DockPanel>
+</UserControl>

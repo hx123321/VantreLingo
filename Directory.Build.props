@@ -1,0 +1,19 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>14.0</LangVersion>
+    <Deterministic>true</Deterministic>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <ArtifactsPath>$(MSBuildThisFileDirectory).tmp/build</ArtifactsPath>
+    <RestorePackagesPath>$(MSBuildThisFileDirectory).tmp/nuget/packages</RestorePackagesPath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <Version>0.1.0</Version>
+    <DebugType Condition="'$(Configuration)' == 'Release'">none</DebugType>
+    <CopyOutputSymbolsToPublishDirectory>false</CopyOutputSymbolsToPublishDirectory>
+    <Authors>VantreLingo contributors</Authors>
+    <RepositoryUrl>https://github.com/hx123321/VantreLingo</RepositoryUrl>
+  </PropertyGroup>
+</Project>

@@ -1,0 +1,36 @@
+name: Verify Windows desktop
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Locked build and Core checks
+        shell: pwsh
+        run: ./scripts/Build.ps1 Verify
+      - name: Windows interop checks against isolated native controls
+        shell: pwsh
+        run: |
+          dotnet run --project tests/VantreLingo.Windows.Checks -c Release --no-build
+          if ($LASTEXITCODE -ne 0) { throw "Windows checks failed" }
+      - name: Publish and validate unsigned MSIX
+        shell: pwsh
+        run: ./scripts/Package.ps1
+      - name: Start the actual published WPF application
+        shell: pwsh
+        run: ./scripts/Smoke-Windows.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VantreLingo-windows-x64
+          path: |
+            artifacts/win-x64/
+            artifacts/VantreLingo-x64.msix

@@ -1,0 +1,30 @@
+<Application x:Class="VantreLingo.Desktop.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+  <Application.Resources>
+    <DrawingImage x:Key="AppIcon">
+      <DrawingImage.Drawing>
+        <DrawingGroup>
+          <GeometryDrawing Brush="#6755D9" Geometry="M 0,0 L 32,0 32,32 0,32 Z" />
+          <GeometryDrawing Brush="White" Geometry="M 6,7 L 11,7 16,22 21,7 26,7 18,27 14,27 Z" />
+        </DrawingGroup>
+      </DrawingImage.Drawing>
+    </DrawingImage>
+    <Style TargetType="Window">
+      <Setter Property="FontFamily" Value="Segoe UI, Microsoft YaHei UI" />
+      <Setter Property="FontSize" Value="14" />
+      <Setter Property="Background" Value="#F7F8FC" />
+      <Setter Property="Icon" Value="{StaticResource AppIcon}" />
+    </Style>
+    <Style TargetType="Button">
+      <Setter Property="Padding" Value="14,7" />
+      <Setter Property="Margin" Value="0,0,8,0" />
+      <Setter Property="MinHeight" Value="34" />
+    </Style>
+    <Style TargetType="TextBox">
+      <Setter Property="Padding" Value="8" />
+      <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+  </Application.Resources>
+</Application>

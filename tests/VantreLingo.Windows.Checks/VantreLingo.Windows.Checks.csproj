@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType><TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <UseWPF>true</UseWPF><RuntimeIdentifier>win-x64</RuntimeIdentifier><WindowsSdkPackageVersion>10.0.19041.57</WindowsSdkPackageVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/VantreLingo.Core/VantreLingo.Core.csproj"/>
+    <Compile Include="../../src/VantreLingo.Desktop/Infrastructure/NativeEditSelection.cs" Link="NativeEditSelection.cs"/>
+    <Compile Include="../../src/VantreLingo.Desktop/Infrastructure/DpapiSecretStore.cs" Link="DpapiSecretStore.cs"/>
+    <Compile Include="../../src/VantreLingo.Desktop/Infrastructure/OcrService.cs" Link="OcrService.cs"/>
+  </ItemGroup>
+</Project>

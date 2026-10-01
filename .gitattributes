@@ -1,0 +1,3 @@
+# Preserve upstream license bytes, including their RTF control syntax and CRLF.
+licenses/*.rtf binary
+packaging/Assets/*.png binary

@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "selected_provider_id": "default",
+  "providers": [
+    {
+      "id": "default",
+      "name": "默认 Provider",
+      "endpoint": "https://api.openai.com/v1/",
+      "model": "",
+      "timeout_seconds": 60,
+      "encrypted_api_key": null
+    }
+  ]
+}
