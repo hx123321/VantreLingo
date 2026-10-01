@@ -65,12 +65,14 @@ internal sealed class CaptureService
                 if (element.Current.ProcessId != processId) return new(null, CaptureReason.UiaPidMismatch);
                 if (!element.TryGetCurrentPattern(TextPattern.Pattern, out var pattern) || pattern is not TextPattern textPattern)
                     return new(null, CaptureReason.UiaNoPattern);
-                TextPatternRange[] selections;
-                try { selections = textPattern.GetSelection(); }
-                catch { return new(null, CaptureReason.UiaSelection); }
-                if (selections.Length != 1) return new(null, CaptureReason.UiaSelection);
                 string text;
-                try { text = selections[0].GetText(30_001); }
+                try
+                {
+                    var sels = textPattern.GetSelection();
+                    if (sels.Length != 1) return new(null, CaptureReason.UiaSelection);
+                    text = sels[0].GetText(30_001);
+                }
+                catch { return new(null, CaptureReason.UiaSelection); }
                 catch { return new(null, CaptureReason.UiaSelection); }
                 token.ThrowIfCancellationRequested();
                 if (string.IsNullOrWhiteSpace(text) || text.Length > 30_000)
