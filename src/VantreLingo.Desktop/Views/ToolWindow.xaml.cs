@@ -575,7 +575,7 @@ public partial class ToolWindow : Window, IDisposable
     {
         if (_snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
             return "当前结果没有有效的写作选区，请重新选择并翻译。";
-        if (intent == WritebackIntent.Fast && _warnings.Count > 0)
+        if (intent == WritebackIntent.Fast && _warnings.Length > 0)
             return "译文存在风险，已保留原文。请主动打开工具查看并复制。";
         var replacement = WritebackGate.Replacement(_snapshot, OutputText.Text, action);
         if (string.IsNullOrWhiteSpace(replacement) || replacement.Length > 30_000 || replacement.Contains('\0'))
@@ -598,7 +598,7 @@ public partial class ToolWindow : Window, IDisposable
         _snapshot = null;
         UpdateActions();
         CommitLanguage();
-        SetStatus(_warnings.Count == 0 ? "已粘贴译文，请检查目标位置。" : "已粘贴译文，请检查目标位置；" + string.Join("\n", _warnings));
+        SetStatus(_warnings.Length == 0 ? "已粘贴译文，请检查目标位置。" : "已粘贴译文，请检查目标位置；" + string.Join("\n", _warnings));
         return null;
     }
 
