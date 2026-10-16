@@ -4,7 +4,7 @@ using VantreLingo.Core;
 
 namespace VantreLingo.Desktop.Infrastructure;
 
-// 只支持标准 Unicode Win32 Edit。UIA TextPattern 没有选区替换契约，不能据此盲贴。
+
 internal static class NativeEditSelection
 {
     private const uint GetText = 0x000D, GetTextLength = 0x000E, GetSelection = 0x00B0, ReplaceSelection = 0x00C2;
@@ -43,8 +43,8 @@ internal static class NativeEditSelection
         if (!Send(current.Control, 0x00D5, 0, 0, out var limit) || limit == 0 ||
             (nuint)(current.Text.Length - (current.End - current.Start) + replacement.Length) > limit)
             return "原控件的长度限制不足或无法验证，请复制译文后手动使用。";
-        // 发送前再读一次目标，缩短范围验证和应用之间的间隔。
-        // Win32 没有跨进程的文本 compare-and-swap；并发编辑的最终边界仍需实机验证。
+
+
         var final = Read(locator.Control, snapshot.TopLevelWindow, snapshot.ProcessId,
             intent == WritebackIntent.Review ? reviewWindow : 0);
         if (final is null) return "原控件已不可用，已阻止写回。";
@@ -61,7 +61,7 @@ internal static class NativeEditSelection
         var after = Read(current.Control, current.TopLevelWindow, current.ProcessId,
             intent == WritebackIntent.Review ? reviewWindow : 0);
         var expected = current.Text[..current.Start] + replacement + current.Text[current.End..];
-        // 超时/不确定状态不能重试或自动恢复，以免覆盖用户后续编辑。
+
         return after?.Text == expected ? null : "无法确认完整写回，请检查原文；不会自动重试或更新语言记忆。";
     }
 
@@ -72,7 +72,7 @@ internal static class NativeEditSelection
         var className = new StringBuilder(256);
         if (GetClassName(control, className, className.Capacity) == 0 || className.ToString() != "Edit") return null;
         var style = GetWindowLongPtr(control, -16).ToInt64();
-        // 密码、只读、禁用以及不支持 Unicode 的控件均不提供写回 Locator。
+
         if ((style & (0x20 | 0x800)) != 0 || !IsWindowEnabled(control)) return null;
         if (!Send(control, GetTextLength, 0, 0, out var length) || length > MaxControlLength) return null;
         var pointer = Marshal.AllocHGlobal(checked(((int)length + 1) * sizeof(char)));

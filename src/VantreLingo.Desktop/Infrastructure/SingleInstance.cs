@@ -36,7 +36,7 @@ internal sealed class SingleInstance : IDisposable
         }
         catch (Exception ex) when (ex is IOException or TimeoutException or UnauthorizedAccessException)
         {
-            // 第一实例可能尚在启动或正在退出；第二实例不能绕过单实例门。
+
         }
     }
 
@@ -73,6 +73,6 @@ internal sealed class SingleInstance : IDisposable
         _shutdown.Cancel();
         if (_ownsMutex) _mutex.ReleaseMutex();
         _mutex.Dispose();
-        // Listener 仍可能持有 Token，不提前 Dispose CancellationTokenSource。
+
     }
 }

@@ -53,12 +53,12 @@ internal sealed class HotkeyMapper(
         var bases = new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ScreenshotOcr,
             settings.ClipboardTranslate, settings.PasteTranslation }
             .Select(Parse).OfType<HotkeyModel>().ToList();
-        // 双路由展开：阅读/写作/复制翻译各可再带一个 +Ctrl 走模型版本。
+
         var effective = new List<HotkeyModel>(bases);
         foreach (var text in new[] { settings.ReadTranslate, settings.WriteTranslate, settings.ClipboardTranslate })
         {
             if (Parse(text) is not { } baseKey) continue;
-            if (baseKey.ModifierKeys.HasFlag(ModifierKeys.Control)) continue; // 本身已带 Ctrl，只走模型。
+            if (baseKey.ModifierKeys.HasFlag(ModifierKeys.Control)) continue;
             var variant = baseKey with { Ctrl = true };
             effective.Add(variant);
         }
@@ -76,7 +76,7 @@ internal sealed class HotkeyMapper(
         return model;
     }
 
-    // 不带 Ctrl 的热键拆为免费版 +Ctrl 走模型版；本身已带 Ctrl 的只走模型。
+
     private static (HotkeyModel? Free, HotkeyModel? Model) Split(string text)
     {
         if (Parse(text) is not { } baseKey) return (null, null);

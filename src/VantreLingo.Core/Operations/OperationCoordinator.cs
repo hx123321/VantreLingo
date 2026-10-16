@@ -30,7 +30,7 @@ public sealed class OperationCoordinator : IDisposable
         {
             if (_disposed || !ReferenceEquals(_current, operation) || operation.Token.IsCancellationRequested)
                 return false;
-            // 验证所有权和副作用必须处于同一临界区，避免旧请求回写新结果。
+
             publish();
             return true;
         }

@@ -13,7 +13,7 @@ public partial class ToolWindow
     private async void Ocr_Click(object sender, RoutedEventArgs e) => await CaptureOcrAsync();
     private async void Screenshot_Click(object sender, RoutedEventArgs e) => await CaptureScreenshotAsync();
 
-    // 纯截图：框选即复制到剪贴板，可另存；不经过 OCR，普通 EXE 也可用，不上传图像。
+
     internal async Task CaptureScreenshotAsync()
     {
         if (_screenshot is not null) return;
@@ -51,7 +51,7 @@ public partial class ToolWindow
 
     internal async Task CaptureOcrAsync()
     {
-        // 避免热键连按打开多个框选层。
+
         if (_screenshot is not null) return;
         var operation = BeginOperation();
         _snapshot = null; _readOnly = false;
@@ -60,7 +60,7 @@ public partial class ToolWindow
             var image = await CaptureScreenAsync(operation);
             if (image is null)
             { _operations.TryPublish(operation, () => { _app.ShowTool(); SetStatus("截图已取消，没有保存或上传图像。"); }); return; }
-            // 截图先保留并开放复制/另存；OCR 不可用也不影响截图功能。
+
             _operations.TryPublish(operation, () =>
             {
                 _screenshotImage = image;
@@ -109,7 +109,7 @@ public partial class ToolWindow
         }
     }
 
-    // 全屏框选并返回图像；取消、失败或操作被取代时返回 null。永不抛异常。
+
     private async Task<BitmapSource?> CaptureScreenAsync(Operation operation)
     {
         if (_screenshot is not null) return null;
@@ -145,7 +145,7 @@ public partial class ToolWindow
 
     private void RestoreMainIfCurrent(Operation operation)
     {
-        // 本操作仍是最新时才恢复主窗口；被新操作取代则把界面留给新流程。
+
         try { if (ReferenceEquals(_operation, operation) && !IsVisible && !_app.IsExiting) _app.ShowTool(); }
         catch { }
     }

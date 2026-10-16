@@ -147,7 +147,7 @@ Add("损坏或未知版本的配置保持原样", () =>
 Add("不落盘正文、历史或遥测设置", () =>
 {
     var json = JsonSerializer.Serialize(new AppSettings(), JsonFormat.Options);
-    // 快捷键名 paste_translation 含有 translation 子串，需带前引号精确匹配正文字段。
+
     Assert(!json.Contains("original_text") && !json.Contains("\"translation\":"));
     Throws<InvalidDataException>(() => new AppSettings { Privacy = new() { Telemetry = true } }.Validate());
     new AppSettings { Writing = new() { Mode = "fast" } }.Validate();
@@ -251,7 +251,7 @@ AddAsync("请求超时与用户取消区分", async () =>
         .TranslateAsync(new("你好", plan), CancellationToken.None));
 });
 
-// 可验证选区包含偏移和整个控件的上下文指纹，重复文本不能替代原范围。
+
 const string controlText = "prefix 你好 suffix 你好";
 var snapshot = new SelectionSnapshot(1, 42, 100, null, "Win32.Edit", "你好",
     SelectionSnapshot.Hash("你好"), DateTimeOffset.UtcNow,

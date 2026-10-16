@@ -109,7 +109,7 @@ public static class InquiryService
             if (fields["packaging"].Status == "known" && IsMatch(scope, @"custom|print|brand|design|定制|印刷|设计|設計")) Require(fields, "packaging_design", "conditional", "定制包装需要确认设计；普通包装可人工标为不适用。" );
             products.Add(product with { Id = unassignedRequirements ? "unassigned" : $"product-{products.Count + 1}", SourceStart = valid ? start : -1, Fields = fields });
         }
-        // 含运费才把目的地作为关键缺项，明确排除运费优先。
+
         var excluded = IsMatch(source, @"freight\s+(?:excluded|not included)|(?:exclude|excluding|without)\s+(?:the\s+)?(?:freight|shipping)|不含(?:运费|运输)|不需要(?:运费|运输)");
         var requestedFreight = IsMatch(source, @"(?:including|include[ds]?|with)\s+(?:the\s+)?(?:freight|shipping)|(?:freight|shipping)\s+included|含运费|包含运输");
         if (requestedFreight && !excluded) Require(customer, "destination", "critical", "要求含运费报价，但未提供目的地。" );
@@ -131,7 +131,7 @@ public static class InquiryService
             if (field.Status is not ("known" or "missing" or "ambiguous" or "conflicting" or "not_applicable") ||
                 (field.Value?.Length ?? 0) > 2000 || (field.Evidence?.Length ?? 0) > 10_000 || field.Reason is null || field.Reason.Length > 2000)
                 throw new InvalidDataException("客户字段状态或长度无效。");
-            field = field with { Priority = "optional" }; // 不信任模型的优先级。
+            field = field with { Priority = "optional" };
             if (field.Status == "missing") field = field with { Value = null, Evidence = null };
             else if (string.IsNullOrWhiteSpace(field.Evidence) || !source.Contains(field.Evidence, StringComparison.Ordinal))
                 field = field with { Status = "ambiguous", Value = null, Evidence = null, Reason = "模型证据不能在对应原文范围中定位，已拒绝作为事实。", Priority = "important" };
@@ -169,7 +169,7 @@ public static class InquiryService
     {
         var match = Regex.Match(scope, pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
         if (!match.Success) return;
-        // 同时存在明确“需要”和“不需要”时保持冲突，不覆盖模型已经识别的冲突。
+
         var positive = key == "logo" ? @"(?:add|include|with|need|print)\s+(?:a\s+)?logo|logo\s+(?:on|needed|required)|需要\s*Logo" :
             @"(?:add|include|with|need)\s+(?:retail\s+)?packaging|packaging\s+(?:needed|required)|需要\s*包装";
         if (fields[key].Status == "conflicting" || IsMatch(scope.Remove(match.Index, match.Length), positive))

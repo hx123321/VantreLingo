@@ -30,7 +30,7 @@ public static class WritebackGate
         return null;
     }
 
-    // 追加在同一次选区替换内完成，不移动选区或先删除原文。
+
     public static string Replacement(SelectionSnapshot snapshot, string translation, WritebackAction action) =>
         action == WritebackAction.Append ? snapshot.OriginalText + translation : translation;
 }
@@ -41,7 +41,7 @@ public sealed record TextDifference(string Prefix, string Removed, string Added,
     {
         var prefix = 0;
         while (prefix < Math.Min(original.Length, translation.Length) && original[prefix] == translation[prefix]) prefix++;
-        // 不在 UTF-16 代理对中间拆分。
+
         if (prefix > 0 && char.IsHighSurrogate(original[prefix - 1])) prefix--;
         var suffix = 0;
         while (suffix < Math.Min(original.Length, translation.Length) - prefix &&

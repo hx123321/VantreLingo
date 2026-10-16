@@ -53,7 +53,7 @@ public partial class App : Application
             Glossary = _glossaryStore.Load();
             Settings = SettingsStore.Load();
             Providers = _providerStore.Load();
-            // 禁止凭据请求经重定向转发，也没有 Provider 自动切换、启动探测或轮询。
+
             _http = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = Timeout.InfiniteTimeSpan };
             _tool = new ToolWindow(this, _http);
             MainWindow = _tool;
@@ -146,7 +146,7 @@ public partial class App : Application
 
     private void MigrateWriteHotkey()
     {
-        // 旧默认 Ctrl+Alt+G 迁移为 Alt+G（+Ctrl 自动走模型）。
+
         if (Settings.Hotkeys.WriteTranslate != "Ctrl+Alt+G") return;
         var migrated = Settings with { Hotkeys = Settings.Hotkeys with { WriteTranslate = "Alt+G" } };
         try { SettingsStore.Save(migrated); Settings = migrated; }
@@ -208,7 +208,7 @@ public partial class App : Application
 
     internal static void LogCrash(Exception exception)
     {
-        // 只记录异常类型与消息，不记录任何原文、译文或剪贴板内容。
+
         try
         {
             var directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "VantreLingo");
@@ -266,7 +266,7 @@ public partial class App : Application
         settings.Validate();
         providers.Validate();
         HotkeyMapper.Validate(settings.Hotkeys);
-        // 总开关关闭时只校验不注册，保持暂停状态。
+
         if (_hotkeysOn && !_hotkeys!.TryApply(settings.Hotkeys, out error)) return false;
         error = "";
         try

@@ -174,7 +174,7 @@ public partial class ToolWindow : Window, IDisposable
             var reason = outcome.Reason;
             if (!_operations.TryPublish(operation, () =>
             {
-                // 快捷键路径不再直接打开主窗口，统一走小悬浮窗。
+
                 if (snapshot is null)
                 {
                     var detail = CaptureService.Describe(reason);
@@ -194,7 +194,7 @@ public partial class ToolWindow : Window, IDisposable
         catch (OperationCanceledException) { }
         catch
         {
-            // 获取不到文本也不能崩溃：统一走小窗失败提示。
+
             try { Report("无法读取选区，请手动粘贴文本。", fast: false, armClipboardWatch: true); } catch { }
         }
         finally
@@ -210,8 +210,8 @@ public partial class ToolWindow : Window, IDisposable
 
     private async Task<SelectionSnapshot?> TryAutoCopyFallbackAsync(Operation operation)
     {
-        // 显式热键触发的一次性兼容取词：记录旧剪贴板指纹，模拟 Ctrl+C 后等新内容。
-        // 只读剪贴板、不写回、不恢复，避免覆盖用户新复制内容；全程永不抛异常。
+
+
         try
         {
             string? beforeHash;
@@ -241,8 +241,8 @@ public partial class ToolWindow : Window, IDisposable
 
     internal async Task TranslateClipboardAsync(bool useModel = false)
     {
-        // Alt+C：复制并翻译。先模拟一次 Ctrl+C 取当前选区，600ms 内出现剪贴板
-        // 新内容就用它；否则回退到现有剪贴板文本；都没有则失败提示。全程不崩溃。
+
+
         try
         {
             var fresh = await TryCopyAndReadAsync();
@@ -302,7 +302,7 @@ public partial class ToolWindow : Window, IDisposable
                 return;
             }
             TranslationView();
-            // 快速模式失败后仍保持快速模式：这里不切换 Writing.Mode。
+
             var fast = _app.Settings.Writing.Mode == "fast";
             var operation = BeginOperation();
             _miniFailed = false;
@@ -376,7 +376,7 @@ public partial class ToolWindow : Window, IDisposable
         TranslationView();
         var operation = BeginOperation();
         if (_snapshot is not null) _snapshot = _snapshot with { OperationId = operation.Id };
-        // 主窗口按钮：按住 Ctrl 点击走模型，否则走免费接口；浮窗内重试始终先审查。
+
         var useModel = Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl);
         await TranslateAsync(operation, fast: false, useModel: useModel);
     }
@@ -440,8 +440,8 @@ public partial class ToolWindow : Window, IDisposable
                 else if (isFree) SetStatus(StatusText.Text + $"\n免费接口（{freeName}）翻译，重要内容请按 Ctrl 走模型复核。");
                 if (fast)
                 {
-                    // 快速模式：只有目标为中文才尝试一次自动写回；非中文直接弹小窗，
-                    // 仍保持快速模式，不切换 Writing.Mode。所有权临界区内完成副作用。
+
+
                     if (!LanguageRoutingService.IsChinese(result.TargetLanguage))
                     {
                         IntentLabel.Text = "快速模式 · 非中文已保留原文";
@@ -455,8 +455,8 @@ public partial class ToolWindow : Window, IDisposable
                     }
                     else
                     {
-                        // 所有权临界区内校验、一次写回和提交记忆；旧请求不能产生任何副作用。
-                        // 快速失败仍保持快速模式，不切换 Writing.Mode。
+
+
                         var error = ApplyWriteback(WritebackIntent.Fast, WritebackAction.Replace, allowPaste: fromHotkey);
                         if (error is not null)
                         {
@@ -537,7 +537,7 @@ public partial class ToolWindow : Window, IDisposable
         if (intent == WritebackIntent.Read) return "阅读翻译不能修改来源。";
         if (_readOnly || !_completed || _snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
             return "当前结果没有有效的写作选区，请重新选择并翻译。";
-        UpdateRisksAndDiff(); // 人工编辑后重新检查保护项。
+        UpdateRisksAndDiff();
         var mode = _app.Settings.Writing.Writeback;
         if (allowPaste && mode is "paste")
             return PasteFlow(intent, action);
@@ -545,7 +545,7 @@ public partial class ToolWindow : Window, IDisposable
         {
             var (nativeError, attempted) = TryApplySnapshot(intent, action);
             if (nativeError is null) return null;
-            if (attempted) return nativeError; // 已发送写入，状态不确定，禁止二次粘贴。
+            if (attempted) return nativeError;
             return PasteFlow(intent, action);
         }
         var (error, _) = TryApplySnapshot(intent, action);
@@ -558,19 +558,19 @@ public partial class ToolWindow : Window, IDisposable
             return ("当前结果没有有效的写作选区，请重新选择并翻译。", false);
         var error = NativeEditSelection.Apply(_snapshot, OutputText.Text, intent, action, _warnings,
             new WindowInteropHelper(this).Handle, out var attempted);
-        // 已向控件发送写入时，即使超时或校验不确定，也禁止再次使用旧快照。
+
         if (attempted)
         {
             _snapshot = null;
             UpdateActions();
         }
         if (error is not null) return (error, attempted);
-        CommitLanguage(); // 只有确认完整写回后提交写作记忆。
+        CommitLanguage();
         SetStatus(_warnings.Length == 0 ? "已完整写回原选区。" : "已完整写回原选区；" + string.Join("\n", _warnings));
         return (null, attempted);
     }
 
-    // 复制译文 + 回到目标窗口 + Ctrl+V。仅在用户明确触发写回时调用，永不抛异常。
+
     private string? PasteFlow(WritebackIntent intent, WritebackAction action)
     {
         if (_snapshot is null || _operation is null || _snapshot.OperationId != _operation.Id)
@@ -622,7 +622,7 @@ public partial class ToolWindow : Window, IDisposable
         if (_operation is null) return;
         _operations.TryPublish(_operation, () =>
         {
-            // 主窗口按钮：焦点在主窗口，只做原生安全写回；粘贴模式请回目标窗口按 Alt+V。
+
             var error = ApplyWriteback(WritebackIntent.Review, action, allowPaste: false);
             if (error is not null)
                 SetStatus(_app.Settings.Writing.Writeback == "native" ? error : error + "\n当前为粘贴写回模式，可回到目标窗口按 Alt+V。");
@@ -669,7 +669,7 @@ public partial class ToolWindow : Window, IDisposable
             SetStatus(message);
             _miniFailed = true;
             EnsureMini().ShowFailure(message, armClipboardWatch);
-            if (fast) _app.Notify(message); // 托盘气泡不激活工具窗口，快速模式保持不变。
+            if (fast) _app.Notify(message);
         }
         catch { }
     }

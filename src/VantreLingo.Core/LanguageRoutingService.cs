@@ -11,7 +11,7 @@ public sealed record LanguagePlan(string Source, string? ExplicitTarget, string 
 
 public static class LanguageRoutingService
 {
-    // ICU 与 Windows NLS 的枚举不同；简繁中文常用别名必须显式保留。
+
     private static readonly HashSet<string> KnownCodes = CultureInfo
         .GetCultures(CultureTypes.NeutralCultures | CultureTypes.SpecificCultures)
         .Select(c => c.Name).Where(n => n.Length > 0)
