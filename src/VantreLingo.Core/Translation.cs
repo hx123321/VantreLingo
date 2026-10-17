@@ -82,7 +82,7 @@ public static class TranslationContract
 
     public static IReadOnlyList<string> FindProtectionRisks(string source, string translation)
     {
-        // 有限规则检查用于风险提示和快速模式门控，不证明完整语义等价。
+
         const string pattern = @"```[\s\S]*?```|`[^`\r\n]+`|https?://[^\s<>]+|[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}|\{\{[^{}]+\}\}|\$\{[^{}]+\}|[A-Z][A-Z0-9]*(?:[-_][A-Z0-9]+)+|\d+(?:[,./:-]\d+)*(?:\s?%)?|(?<![a-zA-Z])(?:USD|EUR|GBP|CNY|RMB|JPY|mm|cm|kg|mg|pcs)(?![a-zA-Z])|[$€£¥]";
         var risks = new List<string>();
         var originals = Regex.Matches(source, pattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1))
@@ -94,7 +94,7 @@ public static class TranslationContract
                 risks.Add("数字、链接、邮箱或模板变量可能被改变，请检查译文。");
         if (translated.Except(originals, StringComparer.Ordinal).Any())
             risks.Add("译文可能包含原文没有的数字或保护项，请检查。");
-        // 只检查明确的表面迹象；翻译成其他语言时可能保守地要求人工审查。
+
         foreach (var rule in new[]
         {
             (Pattern: @"\b(?:guarantee(?:d|s)?|promise(?:d|s)?)\b|保证|承诺|保證|承諾", Added: true,
@@ -114,7 +114,7 @@ public static class TranslationContract
 
     public static bool HasLanguageEvidence(string text)
     {
-        // 单纯型号、数字、URL、模板和代码不能依靠模型的 confident 标志更新语言记忆。
+
         if (Regex.IsMatch(text, @"=>|^\s*(?:var|const|using|import|def|class|public|SELECT)\b",
             RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)))
             return false;

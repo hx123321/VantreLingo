@@ -134,11 +134,11 @@ public record struct HotkeyModel
         }
     }
 
-    /// <summary>
-    /// Validate hotkey
-    /// </summary>
-    /// <param name="validateKeyGestrue">Try to validate hotkey as a KeyGesture.</param>
-    /// <returns></returns>
+
+
+
+
+
     public bool Validate(bool validateKeyGestrue = false)
     {
         switch (CharKey)

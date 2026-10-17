@@ -5,8 +5,8 @@ using VantreLingo.Core;
 
 namespace VantreLingo.Desktop.Infrastructure;
 
-// 所有剪贴板访问永不抛异常：获取不到返回 null，设置失败返回 false。
-// 调用方必须在 UI 线程（STA）调用；若在其他线程，内部吞掉异常同样返回 null/false。
+
+
 internal static class ClipboardReader
 {
     public static string? TryGetText()

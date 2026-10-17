@@ -32,7 +32,7 @@ internal sealed class CaptureService
 
     public async Task<CaptureOutcome> CaptureAsync(long operationId, CancellationToken token)
     {
-        // 仅由明确热键触发；不读取剪贴板或轮询外部窗口。
+
         try
         {
             var foreground = GetForegroundWindow();

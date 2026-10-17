@@ -7,7 +7,7 @@ param(
 $ErrorActionPreference = "Stop"
 $TaskRoot = Split-Path $PSScriptRoot -Parent
 Set-Location $TaskRoot
-# 不生成/安装证书、不自动信任发布者、不上传或发布包。
+
 if ($CertificatePath -and $CertificateThumbprint) { throw "Choose a PFX path or certificate thumbprint." }
 if (-not $WindowsSdkBin) {
     $SdkRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits/10/bin"
@@ -32,7 +32,7 @@ if ($CertificatePath -or $CertificateThumbprint) {
     $SignArgs = @("sign", "/fd", "SHA256")
     if ($CertificatePath) { $SignArgs += @("/f", (Resolve-Path $CertificatePath).Path) }
     else { $SignArgs += @("/sha1", $CertificateThumbprint) }
-    # 密码由 signtool/证书存储处理，不把明文密码加入命令行或仓库。
+
     & (Join-Path $WindowsSdkBin "signtool.exe") @SignArgs $Output
     if ($LASTEXITCODE -ne 0) { throw "Signing failed; certificate subject must match Publisher." }
     & (Join-Path $WindowsSdkBin "signtool.exe") verify /pa $Output

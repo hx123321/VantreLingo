@@ -7,8 +7,8 @@ using VantreLingo.Desktop.Infrastructure;
 
 namespace VantreLingo.Desktop.Views;
 
-// 跟随小窗：只显示译文。原文默认截 5 字，悬停显示全文；点击译文复制。
-// 粘贴/重试/主窗口走全局热键（Alt+V / Alt+C）与托盘，不在这里堆按钮。
+
+
 public partial class MiniResultWindow : Window
 {
     public Action? CopyRequested { get; set; }

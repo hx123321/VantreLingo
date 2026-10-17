@@ -79,7 +79,7 @@ public sealed record PresetCatalog
     [new() { Id = "customer-business", Name = "客户商务", Scene = "customer_email", Domain = "oem_manufacturing", Tone = "professional_business", Persona = "direct_practical" },
      new() { Id = "formal-document", Name = "正式文件", Scene = "formal_document", Tone = "serious_precise", Persona = "literal_rigid", Fidelity = "strict" },
      new() { Id = "friendly-chat", Name = "友好聊天", Scene = "instant_message", Tone = "friendly_polite", Fidelity = "standard" }];
-    // 示例附带的冲突说明不能覆盖内置校验规则。
+
     public string[][] Conflicts { get; init; } = [];
     public void Validate()
     {

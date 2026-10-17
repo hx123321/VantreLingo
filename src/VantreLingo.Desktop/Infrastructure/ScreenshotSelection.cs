@@ -10,8 +10,8 @@ using System.Windows.Threading;
 
 namespace VantreLingo.Desktop.Infrastructure;
 
-// 全屏框选：不再使用 ShowDialog/DialogResult，改用 Task 完成通知，任何异常只弄脏
-// 本次截图，永不抛到调用方。截图与中间图像不落盘。
+
+
 internal sealed class ScreenshotSelection : Window
 {
     private readonly TaskCompletionSource<bool> _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -81,7 +81,7 @@ internal sealed class ScreenshotSelection : Window
             try { _canvas.ReleaseMouseCapture(); } catch { }
             var a = PointToScreen(new Point(Math.Min(start.X, end.X), Math.Min(start.Y, end.Y)));
             var b = PointToScreen(new Point(Math.Max(start.X, end.X), Math.Max(start.Y, end.Y)));
-            // 先藏起遮罩并等一帧渲染，再抓实际像素，避免把调光层截进去。
+
             Visibility = Visibility.Hidden;
             await Dispatcher.Yield(DispatcherPriority.Render);
             DwmFlush();

@@ -1,7 +1,7 @@
 namespace VantreLingo.Core;
 
-// 本地直译：输入与术语库 active 词条整句一致时直接返回目标文本，不调用 LLM。
-// 只做精确匹配（不做分词/模糊），计划语言不符、草稿/禁用词条一律跳过，永不抛异常。
+
+
 public static class DirectTranslation
 {
     public static TranslationResult? TryTranslate(string text, LanguagePlan plan, GlossaryCatalog? glossary)

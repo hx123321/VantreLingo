@@ -76,7 +76,7 @@ public partial class ToolWindow
         ProductGrid.CommitEdit(DataGridEditingUnit.Cell, true); ProductGrid.CommitEdit(DataGridEditingUnit.Row, true);
         if (_inquiry is null) throw new InvalidDataException("没有有效整理结果。");
         static Dictionary<string, InquiryField> Fields(List<FieldRow> rows) => rows.ToDictionary(r => r.Name, r => r.ToField());
-        // 人工纠正明确标注，不将用户修改的值伪装为模型已验证事实。
+
         var customer = Fields(_customerRows);
         var products = _inquiry.Products.Select(p => p with { Fields = Fields(_productRows[p.Id]) }).ToList();
         var issues = customer.Select(kv => (Path: "customer." + kv.Key, Field: kv.Value))
@@ -100,7 +100,7 @@ public partial class ToolWindow
             if (dialog.ShowDialog(this) != true) return;
             path = dialog.FileName; json = dialog.FilterIndex == 2;
         }
-        // 模态文件选择期间可能开始新的请求，必须在选择完后重新检查所有权。
+
         _operations.TryPublish(operation, () =>
         {
             try

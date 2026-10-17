@@ -11,7 +11,7 @@ public static class VantreWindowInspector {
     public static extern int GetClassName(IntPtr window, StringBuilder text, int length);
 }
 '@
-# 仅启动本次发布结果；不配置 Provider、不发请求、不操作任何外部用户控件。
+
 $TaskProcess = Start-Process $TaskExe -PassThru
 try {
     $TaskReady = $false

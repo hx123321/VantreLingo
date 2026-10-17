@@ -49,7 +49,7 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
             if (!response.IsSuccessStatusCode)
                 throw new HttpRequestException($"Provider 请求失败（HTTP {(int)response.StatusCode}）。请检查配置。",
                     null, response.StatusCode);
-            // 不读取或显示 Provider 错误正文，响应限制避免异常响应耗尽内存。
+
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var buffer = new MemoryStream();
             var block = new byte[8192];
@@ -64,8 +64,8 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
             if (!document.RootElement.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
                 throw new InvalidDataException("Provider 未返回约定的完整 JSON 结果。");
             var choice = choices[0];
-            // 兼容 opencode / Go 自建网关：finish_reason 可能为 stop、end_turn 或缺省（null）。
-            // length、content_filter、tool_calls 等仍视为截断，拒绝使用。
+
+
             string? finishReason = null;
             if (choice.TryGetProperty("finish_reason", out var finishElement) && finishElement.ValueKind != JsonValueKind.Null)
                 finishReason = finishElement.GetString();
@@ -92,7 +92,7 @@ public sealed class OpenAiCompatibleClient(HttpClient httpClient, ProviderProfil
 
     internal static string? ExtractMessageContent(JsonElement content)
     {
-        // 标准为 string；部分 Go 网关返回 content 数组（文本块）。
+
         if (content.ValueKind == JsonValueKind.String) return content.GetString();
         if (content.ValueKind == JsonValueKind.Null || content.ValueKind == JsonValueKind.Undefined) return null;
         if (content.ValueKind != JsonValueKind.Array) return null;

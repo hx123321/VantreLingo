@@ -21,7 +21,7 @@ public static class FormalContentValidator
             if (a != b) risks.Add($"正式文件的{message}可能发生变化，请人工核对。");
         }
         if (source.Count(c => c == '\n') != translation.Count(c => c == '\n')) risks.Add("正式文件的换行结构发生变化，请检查格式。");
-        // 这些规则只覆盖表面迹象，绝不声称证明事实和语义等价。
+
         return risks;
     }
 }

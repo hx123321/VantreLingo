@@ -5,9 +5,9 @@ using System.Text.Json;
 
 namespace VantreLingo.Core;
 
-// 免费免 key 翻译：谷歌网页接口 / 微软 Edge 免费 token，派生自固定基座的 BuiltIn 思路。
-// 单次调用只跑所选的一个引擎，不自动切换；文本只发往所选引擎。
-// 超长按 1000 字符分块（总量上限 5000），失败抛受控异常，永不写回半成品。
+
+
+
 public static class FreeTranslators
 {
     public const int ChunkSize = 1000;
@@ -75,7 +75,7 @@ public static class FreeTranslators
             catch (InvalidDataException) { effective = "zh-CN"; }
             if (effective.Equals("zh-CN", StringComparison.OrdinalIgnoreCase))
                 return Build(text, first, detected, "zh-CN", plan);
-            // 检测与显式源语言不一致时纠正调用必须用 auto，否则源语言会被锁死。
+
             var (second, _) = await CallAsync(http, text, "auto", MapCode(effective), ct);
             return Build(text, second, detected, effective, plan);
         }

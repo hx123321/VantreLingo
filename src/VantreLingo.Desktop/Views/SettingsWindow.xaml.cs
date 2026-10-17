@@ -129,7 +129,7 @@ public partial class SettingsWindow : Window
     {
         var dialog = new SaveFileDialog { Filter = "JSON|*.json", FileName = "settings-export.json" };
         if (dialog.ShowDialog(this) != true) return;
-        // 只导出已保存的元数据，不包括任何密钥、密文或客户正文。
+
         File.WriteAllText(dialog.FileName, JsonSerializer.Serialize(new { settings = _app.Settings,
             providers = _app.Providers with { Providers = _app.Providers.Providers.Select(p => p with { EncryptedApiKey = null }).ToList() } }, JsonFormat.Options));
         StatusText.Text = "已导出已保存的普通设置，不含 API key。";

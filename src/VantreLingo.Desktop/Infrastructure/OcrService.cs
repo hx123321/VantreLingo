@@ -44,7 +44,7 @@ internal static class OcrService
         using var bitmap = await decoder.GetSoftwareBitmapAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied).AsTask(token);
         var result = await engine.RecognizeAsync(bitmap).AsTask(token);
         token.ThrowIfCancellationRequested();
-        // 提供识别文本，不向 Provider 发送图像。文本只有用户主动翻译/整理时才发送。
+
         return result.Text;
     }
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
